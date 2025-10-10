@@ -1,0 +1,8 @@
+Flask
+
+tensorflow
+numpy==1.24.3
+scipy==1.11.1
+pandas==2.0.3
+scikit-learn
+werkzeug==2.3.7
