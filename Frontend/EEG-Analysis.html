@@ -97,7 +97,7 @@
                                 <div class="col-md-4">
                                     <label class="form-label">Upload EEG Dataset</label>
                                     <input type="file" id="fileInput" class="form-control" accept=".csv,.mat,.edf,.bdf,.set" />
-                                    <small class="form-text text-muted">Supported formats: CSV, MAT, EDF, BDF, SET</small>
+                                    <small class="form-text text-muted">Supported formats: CSV</small>
                                 </div>
                                 <div class="col-md-2">
                                     <label class="form-label">Window Size</label>
@@ -118,13 +118,21 @@
                                         <option value="1024">1024 Hz</option>
                                     </select>
                                 </div>
+                                <!-- <div class="col-md-3">
+                                    <label class="form-label">Animation Speed</label>
+                                    <div class="d-flex align-items-center">
+                                        <input type="range" id="animationSpeedSlider" class="form-range me-2" 
+                                               min="10" max="500" step="10" value="100">
+                                        <span id="animationSpeedDisplay" class="small text-muted">100ms</span>
+                                    </div>
+                                </div> -->
                                 <div class="col-12">
                                     <div class="d-flex gap-2 flex-wrap">
                                         <button id="playPauseBtn" class="btn btn-primary" disabled>
                                             <i class="bi bi-play-fill me-1"></i>Play Animation
                                         </button>
                                         <button id="analyzeBtn" class="btn btn-outline-primary">
-                                            <i class="bi bi-graph-up me-1"></i>Analyze EEG
+                                            <i class="bi bi-graph-up me-1"></i>Load EEG Data
                                         </button>
                                         <button id="resetBtn" class="btn btn-outline-secondary">
                                             <i class="bi bi-arrow-clockwise me-1"></i>Reset
@@ -170,6 +178,25 @@
                                         <label class="form-label">Select Channels for Polar Plot:</label>
                                         <div class="d-flex flex-wrap gap-2 mt-2" id="polarChannelsSelection">
                                             <!-- Will be populated dynamically -->
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row mt-2">
+                                    <div class="col-md-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="polarRealTimeUpdate" checked>
+                                            <label class="form-check-label" for="polarRealTimeUpdate">
+                                                Real-time Animation Updates
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Animation Window Size</label>
+                                        <div class="d-flex align-items-center">
+                                            <input type="range" id="polarWindowSlider" class="form-range me-2" 
+                                                   min="100" max="1000" step="50" value="500">
+                                            <span id="polarWindowDisplay" class="small text-muted">500</span>
                                         </div>
                                     </div>
                                 </div>
@@ -278,9 +305,7 @@
                         <div class="card h-100">
                             <div class="card-body">
                                 <h5 class="card-title">Recurrence Plot</h5>
-                                <div class="chart-container-sm">
-                                    <div id="recurrenceChart"></div>
-                                </div>
+                                <div id="recurrenceChart" style="height: 300px;"></div>
                             </div>
                         </div>
                     </div>

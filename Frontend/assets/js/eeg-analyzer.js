@@ -19,11 +19,13 @@ let selectedPolarChannels = []; // Separate selection for polar only
 let polarColors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b'];
 
 // Recurrence Plot properties
+let recurrenceChannelX = null;
+let recurrenceChannelY = null;
 let recurrenceChannel1 = null;
 let recurrenceChannel2 = null;
 let recurrenceThreshold = 0.1;
 let recurrenceMode = 'scatter'; // 'scatter' or 'heatmap'
-let recurrenceColormap = 'Viridis'; // 'Viridis', 'Plasma', 'Hot', 'Jet'
+let recurrenceColormap = 'Viridis';
 
 // Drag selection variables
 let isDragging = false;
@@ -227,23 +229,19 @@ function addModeControlSections() {
                             <h5 class="card-title mb-3">Recurrence Plot Settings</h5>
                             <div class="row g-3">
                                 <div class="col-md-3">
-                                    <label class="form-label">Channel X</label>
+                                    <label class="form-label">Channel 1</label>
                                     <select id="recurrenceChannel1" class="form-select">
                                         <!-- Will be populated dynamically -->
                                     </select>
                                 </div>
                                 <div class="col-md-3">
-                                    <label class="form-label">Channel Y</label>
+                                    <label class="form-label">Channel 2</label>
                                     <select id="recurrenceChannel2" class="form-select">
                                         <!-- Will be populated dynamically -->
                                     </select>
                                 </div>
                                 <div class="col-md-2">
-                                    <label class="form-label">Threshold</label>
-                                    <input type="number" id="recurrenceThreshold" class="form-control" min="0.01" max="1" step="0.01" value="0.1">
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label">Plot Type</label>
+                                    <label class="form-label">Mode</label>
                                     <select id="recurrenceMode" class="form-select">
                                         <option value="scatter" selected>Scatter Plot</option>
                                         <option value="heatmap">Density Heatmap</option>
@@ -254,9 +252,16 @@ function addModeControlSections() {
                                     <select id="recurrenceColormap" class="form-select">
                                         <option value="Viridis" selected>Viridis</option>
                                         <option value="Plasma">Plasma</option>
-                                        <option value="Hot">Hot</option>
-                                        <option value="Jet">Jet</option>
+                                        <option value="Blues">Blues</option>
+                                        <option value="Reds">Reds</option>
+                                        <option value="YlOrRd">YlOrRd</option>
                                     </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Update</label>
+                                    <button id="updateRecurrenceBtn" class="btn btn-primary w-100">
+                                        <i class="bi bi-arrow-clockwise"></i> Update
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -274,41 +279,53 @@ function addModeControlSections() {
             waveFilterSection.insertAdjacentHTML('afterend', recurrenceControlsHTML);
         }
         
-        // Add event listeners
-        document.getElementById('recurrenceChannel1')?.addEventListener('change', function() {
-            recurrenceChannel1 = this.value;
-            if (eegData && visualizationMode.value === 'recurrence') {
-                updateRecurrencePlotMain();
+        // Add event listeners immediately after creating the HTML
+        setTimeout(() => {
+            const recChannel1Select = document.getElementById('recurrenceChannel1');
+            const recChannel2Select = document.getElementById('recurrenceChannel2');
+            const recurrenceModeSelect = document.getElementById('recurrenceMode');
+            const recurrenceColormapSelect = document.getElementById('recurrenceColormap');
+            const updateRecurrenceBtn = document.getElementById('updateRecurrenceBtn');
+            
+            if (recChannel1Select) {
+                recChannel1Select.addEventListener('change', function() {
+                    recurrenceChannel1 = this.value;
+                    console.log('Channel 1 changed to:', recurrenceChannel1);
+                });
             }
-        });
-        
-        document.getElementById('recurrenceChannel2')?.addEventListener('change', function() {
-            recurrenceChannel2 = this.value;
-            if (eegData && visualizationMode.value === 'recurrence') {
-                updateRecurrencePlotMain();
+            
+            if (recChannel2Select) {
+                recChannel2Select.addEventListener('change', function() {
+                    recurrenceChannel2 = this.value;
+                    console.log('Channel 2 changed to:', recurrenceChannel2);
+                });
             }
-        });
-        
-        document.getElementById('recurrenceThreshold')?.addEventListener('change', function() {
-            recurrenceThreshold = parseFloat(this.value);
-            if (eegData && visualizationMode.value === 'recurrence') {
-                updateRecurrencePlotMain();
+            
+            if (recurrenceModeSelect) {
+                recurrenceModeSelect.addEventListener('change', function() {
+                    recurrenceMode = this.value;
+                    if (eegData) updateRecurrencePlotMain();
+                });
             }
-        });
-        
-        document.getElementById('recurrenceMode')?.addEventListener('change', function() {
-            recurrenceMode = this.value;
-            if (eegData && visualizationMode.value === 'recurrence') {
-                updateRecurrencePlotMain();
+            
+            if (recurrenceColormapSelect) {
+                recurrenceColormapSelect.addEventListener('change', function() {
+                    recurrenceColormap = this.value;
+                    if (eegData) updateRecurrencePlotMain();
+                });
             }
-        });
-        
-        document.getElementById('recurrenceColormap')?.addEventListener('change', function() {
-            recurrenceColormap = this.value;
-            if (eegData && visualizationMode.value === 'recurrence') {
-                updateRecurrencePlotMain();
+            
+            if (updateRecurrenceBtn) {
+                updateRecurrenceBtn.addEventListener('click', function() {
+                    console.log('Update button clicked');
+                    if (eegData && recurrenceChannel1 && recurrenceChannel2) {
+                        updateRecurrencePlotMain();
+                    } else {
+                        alert('Please load data and select channels first');
+                    }
+                });
             }
-        });
+        }, 100);
     }
 }
 
@@ -497,10 +514,10 @@ function initializeChannelSelection() {
         });
     }
     
-    // Populate recurrence channel dropdowns (only if they exist)
+    // Populate recurrence channel dropdowns
     const recChannel1Select = document.getElementById('recurrenceChannel1');
     const recChannel2Select = document.getElementById('recurrenceChannel2');
-    
+
     if (recChannel1Select && recChannel2Select) {
         recChannel1Select.innerHTML = '';
         recChannel2Select.innerHTML = '';
@@ -509,18 +526,164 @@ function initializeChannelSelection() {
             const option1 = document.createElement('option');
             option1.value = channel;
             option1.textContent = channel;
+            recChannel1Select.appendChild(option1);
             
             const option2 = document.createElement('option');
             option2.value = channel;
             option2.textContent = channel;
-            
-            recChannel1Select.appendChild(option1);
             recChannel2Select.appendChild(option2);
         });
         
         // Set default selections
-        if (recurrenceChannel1) recChannel1Select.value = recurrenceChannel1;
-        if (recurrenceChannel2) recChannel2Select.value = recurrenceChannel2;
+        recChannel1Select.value = recurrenceChannel1 || channelNames[0];
+        recChannel2Select.value = recurrenceChannel2 || (channelNames.length > 1 ? channelNames[1] : channelNames[0]);
+        
+        recurrenceChannel1 = recChannel1Select.value;
+        recurrenceChannel2 = recChannel2Select.value;
+        
+        console.log('Recurrence dropdowns populated:', recurrenceChannel1, 'vs', recurrenceChannel2);
+    }
+}
+
+// Update the initializeChannelSelection function to handle duplicates properly
+function initializeChannelSelection() {
+    // Remove any existing channel selection containers first
+    const existingContainers = document.querySelectorAll('#channelSelectionContainer');
+    existingContainers.forEach(container => container.remove());
+    
+    // Also remove any containers with the old ID structure
+    const oldContainers = document.querySelectorAll('[id*="noChannelsMessage"]');
+    oldContainers.forEach(container => {
+        if (container.parentElement) {
+            container.parentElement.remove();
+        } else {
+            container.remove();
+        }
+    });
+    
+    // Try to find a suitable parent container
+    const mainContent = document.querySelector('.card-body') || 
+                       document.querySelector('.container') || 
+                       document.querySelector('main') ||
+                       document.body;
+    
+    // Create the channel selection container
+    const channelSelectionRow = document.createElement('div');
+    channelSelectionRow.className = 'row mb-3';
+    channelSelectionRow.id = 'channelSelectionContainer';
+    
+    // Add a title
+    const titleCol = document.createElement('div');
+    titleCol.className = 'col-12 mb-2';
+    titleCol.innerHTML = '<h6>Select EEG Channels:</h6>';
+    channelSelectionRow.appendChild(titleCol);
+    
+    // Add channel checkboxes
+    channelNames.forEach((channel, index) => {
+        const isChecked = selectedChannels.includes(channel);
+        const col = document.createElement('div');
+        col.className = 'col-md-2 col-4 mb-2';
+        
+        col.innerHTML = `
+            <div class="form-check">
+                <input class="form-check-input channel-checkbox" type="checkbox" id="channel${index}" 
+                    data-channel="${channel}" ${isChecked ? 'checked' : ''}>
+                <label class="form-check-label" for="channel${index}">${channel}</label>
+            </div>
+        `;
+        
+        channelSelectionRow.appendChild(col);
+    });
+    
+    // Insert it at the beginning of the main content
+    mainContent.insertBefore(channelSelectionRow, mainContent.firstChild);
+    
+    // Add event listeners to checkboxes
+    document.querySelectorAll('.channel-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const channel = this.dataset.channel;
+            
+            if (this.checked) {
+                if (!selectedChannels.includes(channel)) {
+                    selectedChannels.push(channel);
+                }
+            } else {
+                selectedChannels = selectedChannels.filter(ch => ch !== channel);
+            }
+            
+            updateVisualizations();
+        });
+    });
+    
+    // Populate polar channels selection (only if container exists)
+    const polarChannelsSelection = document.getElementById('polarChannelsSelection');
+    if (polarChannelsSelection) {
+        polarChannelsSelection.innerHTML = '';
+        
+        channelNames.forEach((channel, index) => {
+            const isChecked = selectedPolarChannels.includes(channel);
+            const checkbox = document.createElement('div');
+            checkbox.className = 'form-check form-check-inline';
+            
+            checkbox.innerHTML = `
+                <input class="form-check-input polar-channel-checkbox" type="checkbox" id="polarChannel${index}" 
+                    data-channel="${channel}" ${isChecked ? 'checked' : ''}>
+                <label class="form-check-label" for="polarChannel${index}">${channel}</label>
+            `;
+            
+            polarChannelsSelection.appendChild(checkbox);
+        });
+        
+        // Add event listeners to polar checkboxes
+        document.querySelectorAll('.polar-channel-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const channel = this.dataset.channel;
+                
+                if (this.checked) {
+                    if (!selectedPolarChannels.includes(channel)) {
+                        selectedPolarChannels.push(channel);
+                    }
+                } else {
+                    selectedPolarChannels = selectedPolarChannels.filter(ch => ch !== channel);
+                }
+                
+                const visualizationMode = document.getElementById('visualizationMode');
+                if (visualizationMode && visualizationMode.value === 'polar') {
+                    updatePolarPlotMain();
+                }
+                createPolarPlot(); // Update the small polar plot as well
+            });
+        });
+    }
+    
+    // Populate recurrence channel dropdowns
+    const recChannel1Select = document.getElementById('recurrenceChannel1');
+    const recChannel2Select = document.getElementById('recurrenceChannel2');
+
+    if (recChannel1Select && recChannel2Select) {
+        recChannel1Select.innerHTML = '';
+        recChannel2Select.innerHTML = '';
+        
+        channelNames.forEach(channel => {
+            const option1 = document.createElement('option');
+            option1.value = channel;
+            option1.textContent = channel;
+            recChannel1Select.appendChild(option1);
+            
+            const option2 = document.createElement('option');
+            option2.value = channel;
+            option2.textContent = channel;
+            recChannel2Select.appendChild(option2);
+        });
+        
+        // Set default selections
+        recChannel1Select.value = recurrenceChannel1 || channelNames[0];
+        recChannel2Select.value = recurrenceChannel2 || (channelNames.length > 1 ? channelNames[1] : channelNames[0]);
+        
+        recurrenceChannel1 = recChannel1Select.value;
+        recurrenceChannel2 = recChannel2Select.value;
+        
+        console.log('Recurrence dropdowns populated:', recurrenceChannel1, 'vs', recurrenceChannel2);
     }
 }
 
@@ -529,6 +692,11 @@ function initializeVisualizations() {
     updateVisualizations();
     createPolarPlot();
     createRecurrencePlot();
+    
+    // Setup controls for small recurrence plot after a short delay to ensure DOM is ready
+    setTimeout(() => {
+        setupSmallRecurrencePlotControls();
+    }, 100);
 }
 
 // Update visualizations based on current mode
@@ -1052,29 +1220,37 @@ function createPolarPlot() {
 
 // Create recurrence plot (small version)
 function createRecurrencePlot() {
-    if (!eegData) return;
+    if (!eegData || !channelNames || channelNames.length === 0) {
+        console.warn("Cannot create recurrence plot: no data available");
+        return;
+    }
     
-    // Use first two channels or first channel twice if only one exists
-    const channel1Name = recurrenceChannel1 || channelNames[0];
-    const channel2Name = recurrenceChannel2 || channel1Name;
+    // Use the selected channels from the dropdowns
+    const channelXSelect = document.getElementById('recurrenceChannelX');
+    const channelYSelect = document.getElementById('recurrenceChannelY');
+    
+    const channel1Name = channelXSelect ? channelXSelect.value : (recurrenceChannelX || channelNames[0]);
+    const channel2Name = channelYSelect ? channelYSelect.value : (recurrenceChannelY || (channelNames.length > 1 ? channelNames[1] : channelNames[0]));
     
     const channel1Idx = channelNames.indexOf(channel1Name);
     const channel2Idx = channelNames.indexOf(channel2Name);
     
-    if (channel1Idx === -1 || channel2Idx === -1) return;
+    if (channel1Idx === -1 || channel2Idx === -1) {
+        console.error("Selected channels not found:", channel1Name, channel2Name);
+        return;
+    }
     
-    const channel1Data = eegData[channel1Idx];
-    const channel2Data = eegData[channel2Idx];
+    // Sample data for performance (take every Nth point)
+    const maxPoints = 200;
+    const totalPoints = Math.min(eegData[channel1Idx].length, eegData[channel2Idx].length);
+    const step = Math.max(1, Math.floor(totalPoints / maxPoints));
     
     const xValues = [];
     const yValues = [];
     
-    // Sample data for better performance
-    const step = Math.max(1, Math.floor(channel1Data.length / 200));
-    
-    for (let i = 0; i < Math.min(channel1Data.length, channel2Data.length); i += step) {
-        xValues.push(channel1Data[i]);
-        yValues.push(channel2Data[i]);
+    for (let i = 0; i < totalPoints; i += step) {
+        xValues.push(eegData[channel1Idx][i]);
+        yValues.push(eegData[channel2Idx][i]);
     }
     
     const trace = {
@@ -1083,10 +1259,12 @@ function createRecurrencePlot() {
         type: 'scatter',
         mode: 'markers',
         marker: {
-            size: 2,
-            color: 'red',
-            opacity: 0.5
-        }
+            size: 3,
+            color: '#1f77b4',
+            opacity: 0.6
+        },
+        name: `${channel1Name} vs ${channel2Name}`,
+        hovertemplate: `${channel1Name}: %{x:.2f}<br>${channel2Name}: %{y:.2f}<extra></extra>`
     };
     
     const layout = {
@@ -1098,166 +1276,463 @@ function createRecurrencePlot() {
             title: { 
                 text: `${channel1Name} (μV)`,
                 font: { size: 10 }
-            }
+            },
+            gridcolor: 'rgba(128, 128, 128, 0.2)'
         },
         yaxis: { 
             title: { 
                 text: `${channel2Name} (μV)`,
                 font: { size: 10 }
-            }
+            },
+            gridcolor: 'rgba(128, 128, 128, 0.2)'
         },
         showlegend: false,
-        height: 300,
-        margin: { l: 40, r: 20, t: 40, b: 40 }
+        height: 280,
+        margin: { l: 50, r: 20, t: 40, b: 40 },
+        plot_bgcolor: 'rgba(250, 250, 250, 1)'
     };
     
-    Plotly.newPlot('recurrenceChart', [trace], layout);
+    const config = {
+        displayModeBar: false,
+        responsive: true
+    };
+    
+    const recurrenceChart = document.getElementById('recurrenceChart');
+    if (recurrenceChart) {
+        Plotly.newPlot('recurrenceChart', [trace], layout, config);
+        console.log('Small recurrence plot updated with:', channel1Name, 'vs', channel2Name);
+    } else {
+        console.warn("Recurrence chart element not found");
+    }
 }
 
-// Update statistics
-function updateStatistics() {
-    if (!eegData) return;
-    
-    // Calculate signal duration
-    const duration = timePoints[timePoints.length - 1] - timePoints[0];
-    
-    // Set max time in timeline
-    document.getElementById('totalTime').textContent = `${duration.toFixed(1)}s`;
-}
-
-// Start animation with boundary checks and frame limiting
-function startAnimation() {
-    if (isAnimating || !eegData) return;
-    
-    isAnimating = true;
-    animationFrameCount = 0;
-    
-    // Reset animation if at the end
-    if (currentTimeIdx >= timePoints.length - 1) {
-        currentTimeIdx = 0;
+// ============== UPDATE MAIN RECURRENCE PLOT ==============
+function updateRecurrencePlotMain(fromSlider = false) {
+    if (!eegData || !channelNames || channelNames.length === 0) {
+        console.error("Cannot update recurrence plot: no data available");
+        return;
     }
     
-    const timelineSlider = document.getElementById('timelineSlider');
-    const progressBar = document.getElementById('progressBar');
-    const playPauseBtn = document.getElementById('playPauseBtn');
+    // Get the selected channels from dropdowns
+    const recChannel1Select = document.getElementById('recurrenceChannel1');
+    const recChannel2Select = document.getElementById('recurrenceChannel2');
     
-    animationInterval = setInterval(() => {
-        // Safety check to prevent infinite animations
-        animationFrameCount++;
-        if (animationFrameCount > maxFramesToRender) {
-            console.warn('Animation frame limit reached, stopping animation');
-            stopAnimation();
-            playPauseBtn.innerHTML = '<i class="bi bi-play-fill me-1"></i>Play Animation';
-            return;
-        }
+    const channel1Name = recChannel1Select ? recChannel1Select.value : (recurrenceChannel1 || channelNames[0]);
+    const channel2Name = recChannel2Select ? recChannel2Select.value : (recurrenceChannel2 || (channelNames.length > 1 ? channelNames[1] : channelNames[0]));
+    
+    if (!channel1Name || !channel2Name) {
+        console.error("No channels selected for recurrence plot");
+        return;
+    }
+    
+    // Find channel indices
+    const channel1Idx = channelNames.indexOf(channel1Name);
+    const channel2Idx = channelNames.indexOf(channel2Name);
+    
+    if (channel1Idx === -1 || channel2Idx === -1) {
+        console.error("Selected channels not found in data:", channel1Name, channel2Name);
+        return;
+    }
+    
+    // Get channel data
+    const channel1Data = eegData[channel1Idx];
+    const channel2Data = eegData[channel2Idx];
+    
+    // Determine data range (use window if animating)
+    let startIdx = 0;
+    let endIdx = Math.min(channel1Data.length, channel2Data.length);
+    
+    if (isAnimating && timePoints && currentTimeIdx > 0) {
+        // Use current animation window
+        const windowSize = Math.min(2000, Math.floor(samplingRate * 8)); // 8 seconds window
+        startIdx = Math.max(0, currentTimeIdx - Math.floor(windowSize / 2));
+        endIdx = Math.min(endIdx, startIdx + windowSize);
         
-        // Check boundary before incrementing
-        if (currentTimeIdx < timePoints.length - 1) {
-            // Move to next time point
-            currentTimeIdx++;
-            
-            // Update progress indicators
-            updateTimeDisplay();
-            const progress = (currentTimeIdx / (timePoints.length - 1)) * 100;
-            timelineSlider.value = progress;
-            progressBar.style.width = `${progress}%`;
-            
-            // Update visualizations
-            updateVisualizations(true);
-        } else {
-            // End of data reached
-            stopAnimation();
-            playPauseBtn.innerHTML = '<i class="bi bi-play-fill me-1"></i>Play Animation';
+        // Adjust if at the end
+        if (endIdx >= Math.min(channel1Data.length, channel2Data.length)) {
+            startIdx = Math.max(0, Math.min(channel1Data.length, channel2Data.length) - windowSize);
+            endIdx = Math.min(channel1Data.length, channel2Data.length);
         }
-    }, animationSpeed);
-}
-
-// Stop animation
-function stopAnimation() {
-    if (animationInterval) {
-        clearInterval(animationInterval);
-        animationInterval = null;
     }
     
-    isAnimating = false;
-}
-
-// Update time display
-function updateTimeDisplay() {
-    if (!eegData || currentTimeIdx >= timePoints.length) return;
+    // Sample data for performance
+    const maxPoints = 500;
+    const totalPoints = endIdx - startIdx;
+    const step = Math.max(1, Math.floor(totalPoints / maxPoints));
     
-    const currentTime = timePoints[currentTimeIdx];
-    document.getElementById('currentTime').textContent = `${currentTime.toFixed(1)}s`;
+    const xValues = [];
+    const yValues = [];
+    const timeValues = [];
+    
+    for (let i = startIdx; i < endIdx; i += step) {
+        xValues.push(channel1Data[i]);
+        yValues.push(channel2Data[i]);
+        if (timePoints && timePoints[i] !== undefined) {
+            timeValues.push(timePoints[i]);
+        } else {
+            timeValues.push(i / (samplingRate || 250));
+        }
+    }
+    
+    // Get visualization mode and settings
+    const modeSelect = document.getElementById('recurrenceMode');
+    const colormapSelect = document.getElementById('recurrenceColormap');
+    const thresholdInput = document.getElementById('recurrenceThreshold');
+    
+    const mode = modeSelect ? modeSelect.value : recurrenceMode;
+    const colormap = colormapSelect ? colormapSelect.value : recurrenceColormap;
+    const threshold = thresholdInput ? parseFloat(thresholdInput.value) : recurrenceThreshold;
+    
+    let traces = [];
+    
+    if (mode === 'heatmap') {
+        // Create 2D histogram (heatmap)
+        traces.push({
+            x: xValues,
+            y: yValues,
+            type: 'histogram2d',
+            colorscale: colormap,
+            showscale: true,
+            name: 'Density',
+            hovertemplate: `${channel1Name}: %{x:.2f} μV<br>${channel2Name}: %{y:.2f} μV<br>Count: %{z}<extra></extra>`,
+            nbinsx: 50,
+            nbinsy: 50
+        });
+    } else {
+        // Create scatter plot
+        traces.push({
+            x: xValues,
+            y: yValues,
+            type: 'scatter',
+            mode: 'markers',
+            name: 'Data Points',
+            marker: {
+                size: 4,
+                color: timeValues,
+                colorscale: colormap,
+                showscale: true,
+                colorbar: { 
+                    title: 'Time (s)',
+                    titleside: 'right',
+                    len: 0.7
+                },
+                opacity: 0.6,
+                line: {
+                    color: 'white',
+                    width: 0.5
+                }
+            },
+            hovertemplate: `${channel1Name}: %{x:.2f} μV<br>${channel2Name}: %{y:.2f} μV<br>Time: %{marker.color:.2f}s<extra></extra>`
+        });
+    }
+    
+    // Add current point if animating
+    if (isAnimating && currentTimeIdx < Math.min(channel1Data.length, channel2Data.length)) {
+        const currentValue1 = channel1Data[currentTimeIdx];
+        const currentValue2 = channel2Data[currentTimeIdx];
+        const currentTime = timePoints && timePoints[currentTimeIdx] ? timePoints[currentTimeIdx] : currentTimeIdx / (samplingRate || 250);
+        
+        traces.push({
+            x: [currentValue1],
+            y: [currentValue2],
+            type: 'scatter',
+            mode: 'markers',
+            name: 'Current Point',
+            marker: {
+                size: 15,
+                color: 'red',
+                symbol: 'x',
+                line: { 
+                    width: 3, 
+                    color: 'darkred' 
+                }
+            },
+            showlegend: false,
+            hovertemplate: `<b>Current Point</b><br>${channel1Name}: %{x:.2f} μV<br>${channel2Name}: %{y:.2f} μV<br>Time: ${currentTime.toFixed(2)}s<extra></extra>`
+        });
+    }
+    
+    // Calculate statistics
+    const correlation = calculateCorrelation(xValues, yValues);
+    const mutualInfo = calculateMutualInformation(xValues, yValues);
+    
+    // Create layout
+    const layout = {
+        title: {
+            text: `Recurrence Analysis: ${channel1Name} vs ${channel2Name}<br>` +
+                  `<sub style="font-size: 11px;">Correlation: ${correlation.toFixed(3)} | Mutual Info: ${mutualInfo.toFixed(3)} | Points: ${xValues.length}</sub>`,
+            font: { size: 14 }
+        },
+        xaxis: { 
+            title: `${channel1Name} Amplitude (μV)`,
+            gridcolor: 'rgba(128, 128, 128, 0.2)',
+            zeroline: true,
+            zerolinecolor: 'rgba(0, 0, 0, 0.3)'
+        },
+        yaxis: { 
+            title: `${channel2Name} Amplitude (μV)`,
+            gridcolor: 'rgba(128, 128, 128, 0.2)',
+            zeroline: true,
+            zerolinecolor: 'rgba(0, 0, 0, 0.3)'
+        },
+        showlegend: mode === 'scatter' && isAnimating,
+        height: 500,
+        margin: { l: 70, r: 80, t: 80, b: 70 },
+        plot_bgcolor: 'rgba(248, 249, 250, 0.8)',
+        paper_bgcolor: 'white',
+        hovermode: 'closest'
+    };
+    
+    const config = {
+        responsive: true,
+        displayModeBar: true,
+        modeBarButtonsToRemove: ['pan2d', 'select2d', 'lasso2d', 'autoScale2d'],
+        displaylogo: false
+    };
+    
+    // Plot
+    const mainChart = document.getElementById('mainChart');
+    if (mainChart) {
+        Plotly.newPlot('mainChart', traces, layout, config);
+    } else {
+        console.error("Main chart element not found");
+    }
 }
 
-// Reset visualization
+// ============== HELPER FUNCTIONS ==============
+
+// Calculate correlation coefficient
+function calculateCorrelation(x, y) {
+    if (!x || !y || x.length !== y.length || x.length === 0) return 0;
+    
+    const n = x.length;
+    const meanX = x.reduce((sum, val) => sum + val, 0) / n;
+    const meanY = y.reduce((sum, val) => sum + val, 0) / n;
+    
+    let numerator = 0;
+    let denomX = 0;
+    let denomY = 0;
+    
+    for (let i = 0; i < n; i++) {
+        const dx = x[i] - meanX;
+        const dy = y[i] - meanY;
+        numerator += dx * dy;
+        denomX += dx * dx;
+        denomY += dy * dy;
+    }
+    
+    const denominator = Math.sqrt(denomX * denomY);
+    return denominator === 0 ? 0 : numerator / denominator;
+}
+
+// Calculate mutual information (simplified)
+function calculateMutualInformation(x, y) {
+    if (!x || !y || x.length !== y.length || x.length === 0) return 0;
+    
+    // Use binning approach for mutual information
+    const bins = 10;
+    const minX = Math.min(...x);
+    const maxX = Math.max(...x);
+    const minY = Math.min(...y);
+    const maxY = Math.max(...y);
+    
+    const rangeX = maxX - minX;
+    const rangeY = maxY - minY;
+    
+    if (rangeX === 0 || rangeY === 0) return 0;
+    
+    const binSizeX = rangeX / bins;
+    const binSizeY = rangeY / bins;
+    
+    // Create joint histogram
+    const jointHist = Array(bins).fill().map(() => Array(bins).fill(0));
+    const marginalX = Array(bins).fill(0);
+    const marginalY = Array(bins).fill(0);
+    
+    for (let i = 0; i < x.length; i++) {
+        const binX = Math.min(bins - 1, Math.max(0, Math.floor((x[i] - minX) / binSizeX)));
+        const binY = Math.min(bins - 1, Math.max(0, Math.floor((y[i] - minY) / binSizeY)));
+        
+        jointHist[binX][binY]++;
+        marginalX[binX]++;
+        marginalY[binY]++;
+    }
+    
+    // Calculate mutual information
+    let mi = 0;
+    const n = x.length;
+    
+    for (let i = 0; i < bins; i++) {
+        for (let j = 0; j < bins; j++) {
+            if (jointHist[i][j] > 0 && marginalX[i] > 0 && marginalY[j] > 0) {
+                const pxy = jointHist[i][j] / n;
+                const px = marginalX[i] / n;
+                const py = marginalY[j] / n;
+                
+                if (pxy > 0 && px > 0 && py > 0) {
+                    mi += pxy * Math.log2(pxy / (px * py));
+                }
+            }
+        }
+    }
+    
+    return Math.max(0, mi); // Ensure non-negative
+}
+
+// Update small recurrence plot when channels change
+function updateSmallRecurrencePlot() {
+    if (!eegData || !channelNames || channelNames.length === 0) return;
+    
+    const channelXSelect = document.getElementById('recurrenceChannelX');
+    const channelYSelect = document.getElementById('recurrenceChannelY');
+    
+    if (channelXSelect) {
+        recurrenceChannelX = channelXSelect.value;
+    }
+    
+    if (channelYSelect) {
+        recurrenceChannelY = channelYSelect.value;
+    }
+    
+    // Recreate the small plot with new selections
+    createRecurrencePlot();
+}
+
+// ============== EVENT LISTENERS ==============
+function setupRecurrenceEventListeners() {
+    // Main recurrence plot controls
+    const recChannel1Select = document.getElementById('recurrenceChannel1');
+    const recChannel2Select = document.getElementById('recurrenceChannel2');
+    const recurrenceModeSelect = document.getElementById('recurrenceMode');
+    const recurrenceColormapSelect = document.getElementById('recurrenceColormap');
+    const recurrenceThresholdInput = document.getElementById('recurrenceThreshold');
+    const updateRecurrenceBtn = document.getElementById('updateRecurrenceBtn');
+    
+    // Small recurrence plot controls
+    const channelXSelect = document.getElementById('recurrenceChannelX');
+    const channelYSelect = document.getElementById('recurrenceChannelY');
+    
+    // Main recurrence channel 1
+    if (recChannel1Select) {
+        recChannel1Select.addEventListener('change', function() {
+            recurrenceChannel1 = this.value;
+            const visualizationMode = document.getElementById('visualizationMode');
+            if (eegData && visualizationMode && visualizationMode.value === 'recurrence') {
+                updateRecurrencePlotMain();
+            }
+        });
+    }
+    
+    // Main recurrence channel 2
+    if (recChannel2Select) {
+        recChannel2Select.addEventListener('change', function() {
+            recurrenceChannel2 = this.value;
+            const visualizationMode = document.getElementById('visualizationMode');
+            if (eegData && visualizationMode && visualizationMode.value === 'recurrence') {
+                updateRecurrencePlotMain();
+            }
+        });
+    }
+    
+    // Recurrence mode (scatter/heatmap)
+    if (recurrenceModeSelect) {
+        recurrenceModeSelect.addEventListener('change', function() {
+            recurrenceMode = this.value;
+            const visualizationMode = document.getElementById('visualizationMode');
+            if (eegData && visualizationMode && visualizationMode.value === 'recurrence') {
+                updateRecurrencePlotMain();
+            }
+        });
+    }
+    
+    // Recurrence colormap
+    if (recurrenceColormapSelect) {
+        recurrenceColormapSelect.addEventListener('change', function() {
+            recurrenceColormap = this.value;
+            const visualizationMode = document.getElementById('visualizationMode');
+            if (eegData && visualizationMode && visualizationMode.value === 'recurrence') {
+                updateRecurrencePlotMain();
+            }
+        });
+    }
+    
+    // Recurrence threshold
+    if (recurrenceThresholdInput) {
+        recurrenceThresholdInput.addEventListener('change', function() {
+            recurrenceThreshold = parseFloat(this.value) || 0.1;
+            const visualizationMode = document.getElementById('visualizationMode');
+            if (eegData && visualizationMode && visualizationMode.value === 'recurrence') {
+                updateRecurrencePlotMain();
+            }
+        });
+    }
+    
+    // Update button
+    if (updateRecurrenceBtn) {
+        updateRecurrenceBtn.addEventListener('click', function() {
+            if (eegData) {
+                updateRecurrencePlotMain();
+            }
+        });
+    }
+    
+    // Small recurrence plot - Channel X
+    if (channelXSelect) {
+        channelXSelect.addEventListener('change', function() {
+            recurrenceChannelX = this.value;
+            updateSmallRecurrencePlot();
+        });
+    }
+    
+    // Small recurrence plot - Channel Y
+    if (channelYSelect) {
+        channelYSelect.addEventListener('change', function() {
+            recurrenceChannelY = this.value;
+            updateSmallRecurrencePlot();
+        });
+    }
+    
+    console.log("Recurrence event listeners set up");
+}
+
+// ============== RESET VISUALIZATION ==============
 function resetVisualization() {
-    eegData = null;
-    channelNames = [];
-    timePoints = [];
-    selectedChannels = [];
-    selectedPolarChannels = [];
+    // Reset current time index
     currentTimeIdx = 0;
-    stopAnimation();
     
-    // Reset UI elements with null checks
-    const noChannelsMessageElement = document.getElementById('noChannelsMessage');
-    if (noChannelsMessageElement && noChannelsMessageElement.parentElement) {
-        noChannelsMessageElement.parentElement.innerHTML = `
-            <div class="col-12 text-muted" id="noChannelsMessage">
-                <p>Upload an EEG file to view available channels</p>
-            </div>
-        `;
+    // Stop any ongoing animation
+    if (isAnimating) {
+        stopAnimation();
     }
     
-    // Set wave band powers with null checks
-    const alphaPower = document.getElementById('alphaPower');
-    if (alphaPower) alphaPower.textContent = '-- μV²';
+    // Clear all charts
+    const charts = ['mainChart', 'polarChart', 'recurrenceChart'];
+    charts.forEach(chartId => {
+        try {
+            const chartElement = document.getElementById(chartId);
+            if (chartElement && chartElement.data) {
+                Plotly.purge(chartElement);
+            }
+        } catch (e) {
+            console.warn(`Could not purge ${chartId}:`, e);
+        }
+    });
     
-    const betaPower = document.getElementById('betaPower');
-    if (betaPower) betaPower.textContent = '-- μV²';
-    
-    const deltaPower = document.getElementById('deltaPower');
-    if (deltaPower) deltaPower.textContent = '-- μV²';
-    
-    const thetaPower = document.getElementById('thetaPower');
-    if (thetaPower) thetaPower.textContent = '-- μV²';
-    
-    const signalQuality = document.getElementById('signalQuality');
-    if (signalQuality) signalQuality.textContent = '--%';
-    
-    const classificationResult = document.getElementById('classificationResult');
-    if (classificationResult) {
-        classificationResult.innerHTML = `
-            <p class="text-muted">Upload EEG data and click "AI Classification" to see results</p>
-        `;
+    // Reset UI elements
+    const timelineSlider = document.getElementById('timelineSlider');
+    if (timelineSlider) {
+        timelineSlider.value = 0;
     }
     
-    // Clear charts
-    if (document.getElementById('mainChart')) {
-        Plotly.purge('mainChart');
+    const progressBar = document.getElementById('progressBar');
+    if (progressBar) {
+        progressBar.style.width = '0%';
     }
     
-    if (document.getElementById('polarChart')) {
-        Plotly.purge('polarChart');
-    }
+    // Reset time display
+    updateTimeDisplay();
     
-    if (document.getElementById('recurrenceChart')) {
-        Plotly.purge('recurrenceChart');
-    }
-    
-    if (document.getElementById('brainStateChart')) {
-        Plotly.purge('brainStateChart');
-    }
-    
-    const timelineControl = document.getElementById('timelineControl');
-    if (timelineControl) {
-        timelineControl.style.display = 'none';
-    }
-    
-    // Additional reset for recurrence selections
-    selectedAreaChannel1 = null;
-    selectedAreaChannel2 = null;
+    console.log("Visualization reset complete");
 }
 
 // Add this function to set up the drag selection interface
@@ -1630,3 +2105,371 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// ============== UPDATE TIME DISPLAY ==============
+function updateTimeDisplay() {
+    const currentTimeDisplay = document.getElementById('currentTime');
+    const totalTimeDisplay = document.getElementById('totalTime');
+    
+    if (currentTimeDisplay && timePoints && timePoints.length > 0) {
+        if (currentTimeIdx < timePoints.length) {
+            const currentTime = timePoints[currentTimeIdx];
+            currentTimeDisplay.textContent = `${currentTime.toFixed(2)}s`;
+        } else {
+            currentTimeDisplay.textContent = '0.00s';
+        }
+    }
+    
+    if (totalTimeDisplay && timePoints && timePoints.length > 0) {
+        const totalTime = timePoints[timePoints.length - 1];
+        totalTimeDisplay.textContent = `${totalTime.toFixed(2)}s`;
+    }
+}
+
+// ============== UPDATE STATISTICS ==============
+function updateStatistics() {
+    if (!eegData || !channelNames || channelNames.length === 0) {
+        console.warn("No data available for statistics");
+        return;
+    }
+    
+    // Get or create statistics display element
+    let statsContainer = document.getElementById('statisticsContainer');
+    
+    if (!statsContainer) {
+        // Create statistics container if it doesn't exist
+        statsContainer = document.createElement('div');
+        statsContainer.id = 'statisticsContainer';
+        statsContainer.className = 'row mb-3';
+        
+        // Try to find a good place to insert it
+        const mainContent = document.querySelector('.card-body') || 
+                           document.querySelector('.container') || 
+                           document.body;
+        
+        // Insert after channel selection if it exists
+        const channelSelection = document.getElementById('channelSelectionContainer');
+        if (channelSelection) {
+            channelSelection.insertAdjacentElement('afterend', statsContainer);
+        } else {
+            mainContent.appendChild(statsContainer);
+        }
+    }
+    
+    // Calculate statistics for all channels
+    const stats = calculateChannelStatistics();
+    
+    // Create statistics HTML
+    statsContainer.innerHTML = `
+        <div class="col-12">
+            <div class="card">
+                    <div class="row mt-3 g-3">
+                        <div class="col-md-3">
+                            <div class="stat-box">
+                                <small class="text-muted">Avg Amplitude</small>
+                                <h5 class="mb-0">${stats.avgAmplitude.toFixed(2)} μV</h5>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-box">
+                                <small class="text-muted">Max Amplitude</small>
+                                <h5 class="mb-0">${stats.maxAmplitude.toFixed(2)} μV</h5>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-box">
+                                <small class="text-muted">Min Amplitude</small>
+                                <h5 class="mb-0">${stats.minAmplitude.toFixed(2)} μV</h5>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-box">
+                                <small class="text-muted">Std Deviation</small>
+                                <h5 class="mb-0">${stats.stdDeviation.toFixed(2)} μV</h5>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Add some CSS for stat boxes if not already present
+    if (!document.getElementById('statsStyles')) {
+        const styleTag = document.createElement('style');
+        styleTag.id = 'statsStyles';
+        styleTag.innerHTML = `
+            .stat-box {
+                padding: 15px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border-radius: 8px;
+                color: white;
+                text-align: center;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .stat-box small {
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 0.75rem;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            .stat-box h4, .stat-box h5 {
+                color: white;
+                font-weight: 600;
+                margin-top: 5px;
+            }
+        `;
+        document.head.appendChild(styleTag);
+    }
+}
+
+// ============== CALCULATE CHANNEL STATISTICS ==============
+function calculateChannelStatistics() {
+    if (!eegData || eegData.length === 0) {
+        return {
+            samplingRate: 0,
+            avgAmplitude: 0,
+            maxAmplitude: 0,
+            minAmplitude: 0,
+            stdDeviation: 0
+        };
+    }
+    
+    // Calculate sampling rate
+    let samplingRate = 250; // Default
+    if (timePoints.length > 1) {
+        const timeDiff = timePoints[1] - timePoints[0];
+        samplingRate = timeDiff > 0 ? Math.round(1 / timeDiff) : 250;
+    }
+    
+    // Calculate statistics across all channels
+    let allValues = [];
+    let sumAmplitude = 0;
+    let maxAmplitude = -Infinity;
+    let minAmplitude = Infinity;
+    
+    // Collect all values from all channels
+    eegData.forEach(channelData => {
+        channelData.forEach(value => {
+            allValues.push(Math.abs(value)); // Use absolute values for amplitude
+            sumAmplitude += Math.abs(value);
+            maxAmplitude = Math.max(maxAmplitude, Math.abs(value));
+            minAmplitude = Math.min(minAmplitude, Math.abs(value));
+        });
+    });
+    
+    const totalValues = allValues.length;
+    const avgAmplitude = totalValues > 0 ? sumAmplitude / totalValues : 0;
+    
+    // Calculate standard deviation
+    let sumSquaredDiff = 0;
+    allValues.forEach(value => {
+        sumSquaredDiff += Math.pow(value - avgAmplitude, 2);
+    });
+    const stdDeviation = totalValues > 0 ? Math.sqrt(sumSquaredDiff / totalValues) : 0;
+    
+    return {
+        samplingRate,
+        avgAmplitude,
+        maxAmplitude: maxAmplitude !== -Infinity ? maxAmplitude : 0,
+        minAmplitude: minAmplitude !== Infinity ? minAmplitude : 0,
+        stdDeviation
+    };
+}
+
+// ============== STOP ANIMATION ==============
+function stopAnimation() {
+    if (animationInterval) {
+        clearInterval(animationInterval);
+        animationInterval = null;
+    }
+    isAnimating = false;
+    animationFrameCount = 0;
+    
+    // Update UI
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    if (playPauseBtn) {
+        playPauseBtn.innerHTML = '<i class="bi bi-play-fill me-1"></i>Play Animation';
+    }
+    
+    console.log('Animation stopped');
+}
+
+// ============== START ANIMATION ==============
+function startAnimation() {
+    if (isAnimating || !eegData) return;
+    
+    isAnimating = true;
+    animationFrameCount = 0;
+    
+    // Reset animation if at the end
+    if (currentTimeIdx >= timePoints.length - 1) {
+        currentTimeIdx = 0;
+    }
+    
+    const timelineSlider = document.getElementById('timelineSlider');
+    const progressBar = document.getElementById('progressBar');
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    
+    animationInterval = setInterval(() => {
+        // Safety check
+        animationFrameCount++;
+        if (animationFrameCount > maxFramesToRender) {
+            console.warn('Animation frame limit reached, stopping animation');
+            stopAnimation();
+            if (playPauseBtn) playPauseBtn.innerHTML = '<i class="bi bi-play-fill me-1"></i>Play Animation';
+            return;
+        }
+        
+        // Simple step size
+        const adaptiveStep = Math.max(1, Math.floor(timePoints.length / 5000));
+        
+        // Check boundary before incrementing
+        if (currentTimeIdx < timePoints.length - adaptiveStep * 10) {
+            // Move to next time point
+            currentTimeIdx += adaptiveStep;
+            
+            // Update progress indicators
+            updateTimeDisplay();
+            const progress = (currentTimeIdx / (timePoints.length - 1)) * 100;
+            if (timelineSlider) timelineSlider.value = progress;
+            if (progressBar) progressBar.style.width = `${progress}%`;
+            
+            // Update visualizations
+            const visualizationMode = document.getElementById('visualizationMode');
+            const currentMode = visualizationMode ? visualizationMode.value : 'multichannel';
+            
+            if (currentMode === 'polar') {
+                updatePolarPlotMain(true);
+            } else if (currentMode === 'recurrence') {
+                updateRecurrencePlotMain(true);
+            } else {
+                updateVisualizations(true);
+            }
+            
+            // Update small polar plot periodically
+            if (animationFrameCount % 5 === 0) {
+                createPolarPlot();
+            }
+            
+        } else {
+            // End of data reached
+            stopAnimation();
+            if (playPauseBtn) playPauseBtn.innerHTML = '<i class="bi bi-play-fill me-1"></i>Play Animation';
+        }
+    }, animationSpeed);
+}
+
+// ============== SETUP SMALL RECURRENCE PLOT CONTROLS ==============
+function setupSmallRecurrencePlotControls() {
+    // Find or create the recurrence chart container
+    const recurrenceChartContainer = document.getElementById('recurrenceChart')?.parentElement;
+    if (!recurrenceChartContainer) {
+        console.warn("Recurrence chart container not found");
+        return;
+    }
+    
+    // Check if controls already exist
+    if (document.getElementById('smallRecurrenceControls')) {
+        console.log("Small recurrence controls already exist");
+        return;
+    }
+    
+    // Create controls for small recurrence plot
+    const controlsDiv = document.createElement('div');
+    controlsDiv.id = 'smallRecurrenceControls';
+    controlsDiv.className = 'mt-2';
+    controlsDiv.innerHTML = `
+        <div class="row g-2">
+            <div class="col-6">
+                <label class="form-label" style="font-size: 0.85rem;">Channel X</label>
+                <select id="recurrenceChannelX" class="form-select form-select-sm">
+                    <!-- Will be populated dynamically -->
+                </select>
+            </div>
+            <div class="col-6">
+                <label class="form-label" style="font-size: 0.85rem;">Channel Y</label>
+                <select id="recurrenceChannelY" class="form-select form-select-sm">
+                    <!-- Will be populated dynamically -->
+                </select>
+            </div>
+        </div>
+    `;
+    
+    // Insert after the recurrence chart
+    recurrenceChartContainer.appendChild(controlsDiv);
+    
+    // Populate the dropdowns
+    populateSmallRecurrenceDropdowns();
+    
+    // Add event listeners
+    const channelXSelect = document.getElementById('recurrenceChannelX');
+    const channelYSelect = document.getElementById('recurrenceChannelY');
+    
+    if (channelXSelect) {
+        channelXSelect.addEventListener('change', function() {
+            recurrenceChannelX = this.value;
+            console.log('Small recurrence Channel X changed to:', recurrenceChannelX);
+            createRecurrencePlot(); // Update the small plot
+        });
+    }
+    
+    if (channelYSelect) {
+        channelYSelect.addEventListener('change', function() {
+            recurrenceChannelY = this.value;
+            console.log('Small recurrence Channel Y changed to:', recurrenceChannelY);
+            createRecurrencePlot(); // Update the small plot
+        });
+    }
+    
+    console.log("Small recurrence controls set up successfully");
+}
+
+// ============== POPULATE SMALL RECURRENCE DROPDOWNS ==============
+function populateSmallRecurrenceDropdowns() {
+    const channelXSelect = document.getElementById('recurrenceChannelX');
+    const channelYSelect = document.getElementById('recurrenceChannelY');
+    
+    if (!channelXSelect || !channelYSelect) {
+        console.warn("Small recurrence dropdowns not found in DOM");
+        return;
+    }
+    
+    if (!channelNames || channelNames.length === 0) {
+        console.warn("No channel names available");
+        return;
+    }
+    
+    // Clear existing options
+    channelXSelect.innerHTML = '';
+    channelYSelect.innerHTML = '';
+    
+    // Add options for each channel
+    channelNames.forEach(channel => {
+        const optionX = document.createElement('option');
+        optionX.value = channel;
+        optionX.textContent = channel;
+        channelXSelect.appendChild(optionX);
+        
+        const optionY = document.createElement('option');
+        optionY.value = channel;
+        optionY.textContent = channel;
+        channelYSelect.appendChild(optionY);
+    });
+    
+    // Set default selections
+    if (channelNames.length > 0) {
+        channelXSelect.value = recurrenceChannelX || channelNames[0];
+        recurrenceChannelX = channelXSelect.value;
+    }
+    
+    if (channelNames.length > 1) {
+        channelYSelect.value = recurrenceChannelY || channelNames[1];
+        recurrenceChannelY = channelYSelect.value;
+    } else if (channelNames.length === 1) {
+        channelYSelect.value = recurrenceChannelY || channelNames[0];
+        recurrenceChannelY = channelYSelect.value;
+    }
+    
+    console.log('Small recurrence dropdowns populated:', recurrenceChannelX, 'vs', recurrenceChannelY);
+}
