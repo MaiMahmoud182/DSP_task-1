@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory, render_template
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
 import numpy as np
@@ -23,23 +23,14 @@ import xarray as xr
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# Get the current directory and frontend path
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FRONTEND_DIR = os.path.join(BASE_DIR, '..', 'frontend')
+# Backend API server - no frontend serving needed in Docker
+app = Flask(__name__)
 
-logger.info(f"Backend directory: {BASE_DIR}")
-logger.info(f"Frontend directory: {FRONTEND_DIR}")
-logger.info(f"Frontend exists: {os.path.exists(FRONTEND_DIR)}")
-
-app = Flask(__name__, 
-            template_folder=FRONTEND_DIR,
-            static_folder=os.path.join(FRONTEND_DIR, 'assets'))
-
-# Enhanced CORS configuration
+# Enhanced CORS configuration - allow frontend container
 CORS(app, resources={
     r"/api/*": {
-        "origins": ["http://127.0.0.1:5500", "http://localhost:5500", "http://127.0.0.1:3000", "http://127.0.0.1:5000"],
-        "methods": ["GET", "POST"],
+        "origins": ["http://localhost:3000", "http://127.0.0.1:3000", "*"],
+        "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type"]
     }
 })
@@ -834,25 +825,23 @@ def assess_eeg_signal_quality(channels):
     
     return int(np.mean(qualities)) if qualities else 50
 
-# ==================== ROUTES ====================
+# ==================== API ROUTES ====================
 
-@app.route('/')
-def index():
-    try:
-        return render_template('index.html')
-    except Exception as error:
-        return f"Error loading index.html: {str(error)}"
-
-@app.route('/ecg-analysis')
-def ecg_analysis():
-    try:
-        return render_template('ECG-Analysis.html')
-    except Exception as error:
-        return f"Error loading ECG-Analysis.html: {str(error)}"
-    
-@app.route('/eeg-analysis')
-def eeg_analysis():
-    return render_template('EEG-Analysis.html')
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check endpoint for Docker"""
+    return jsonify({
+        'status': 'healthy',
+        'message': 'Backend API is running',
+        'version': '1.0',
+        'endpoints': {
+            'ecg': '/api/upload-ecg, /api/classify-ecg',
+            'eeg': '/api/eeg/upload, /api/eeg/classify',
+            'doppler': '/api/generate-doppler-sound, /api/analyze-vehicle-sound',
+            'drone': '/upload-drone-audio',
+            'sar': '/api/analyze-sar'
+        }
+    }), 200
 
 @app.route('/api/eeg/health', methods=['GET'])
 def eeg_health_check():
@@ -1115,71 +1104,6 @@ def get_recurrence_data():
         print(f"❌ Error in get_recurrence_data: {e}")
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
-
-@app.route('/doppler-analysis')
-def doppler_analysis_page():
-    try:
-        return render_template('Doppler-Analysis.html')
-    except Exception as error:
-        return f"Error loading Doppler-Analysis.html: {str(error)}"
-
-@app.route('/drone-detector')
-def drone_detector():
-    try:
-        return render_template('drone-detector.html')
-    except Exception as error:
-        return f"Error loading drone-detector.html: {str(error)}"
-
-@app.route('/sar-analyzer')
-def sar_analyzer():
-    try:
-        return render_template('sar-analyzer.html')
-    except Exception as error:
-        return f"Error loading sar-analyzer.html: {str(error)}"
-
-@app.route('/service-details')
-def service_details():
-    try:
-        return render_template('service-details.html')
-    except Exception as error:
-        return f"Error loading service-details.html: {str(error)}"
-
-@app.route('/portfolio-details')
-def portfolio_details():
-    try:
-        return render_template('portfolio-details.html')
-    except Exception as error:
-        return f"Error loading portfolio-details.html: {str(error)}"
-
-# Serve static files
-@app.route('/assets/<path:filename>')
-def serve_assets(filename):
-    assets_path = os.path.join(FRONTEND_DIR, 'assets')
-    return send_from_directory(assets_path, filename)
-
-# Health check endpoint
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    """Health check endpoint for Docker"""
-    return jsonify({
-        'status': 'healthy',
-        'message': 'Backend is running'
-    }), 200
-
-# Debug route
-@app.route('/debug')
-def debug():
-    info = []
-    info.append(f"Backend directory: {BASE_DIR}")
-    info.append(f"Frontend directory: {FRONTEND_DIR}")
-    info.append(f"Frontend exists: {os.path.exists(FRONTEND_DIR)}")
-    
-    if os.path.exists(FRONTEND_DIR):
-        info.append("Files in frontend:")
-        for file in os.listdir(FRONTEND_DIR):
-            info.append(f"  - {file}")
-    
-    return "<br>".join(info)
 
 # ===== ECG API ROUTES =====
 
@@ -1769,12 +1693,10 @@ if __name__ == '__main__':
     ecg_model_loaded = load_ecg_model()
     
     logger.info("\n" + "="*60)
-    logger.info("🚀 STARTING COMBINED ECG, DOPPLER, DRONE DETECTION & SAR ANALYSIS SERVER")
+    logger.info("🚀 STARTING BACKEND API SERVER")
     logger.info("="*60)
-    logger.info(f"📍 Backend directory: {BASE_DIR}")
-    logger.info(f"📍 Frontend directory: {FRONTEND_DIR}")
-    logger.info("📍 Server URL: http://localhost:5000")
-    logger.info("📍 Health check: http://localhost:5000/api/health")
+    logger.info("📍 Server URL: http://0.0.0.0:5000")
+    logger.info("📍 Health check: http://0.0.0.0:5000/api/health")
     logger.info(f"📍 ECG Model loaded: {ecg_model_loaded}")
     logger.info(f"📍 Doppler Analyzer available: {DOPPLER_AVAILABLE}")
     logger.info(f"📍 TensorFlow available: {TENSORFLOW_AVAILABLE}")
@@ -1782,10 +1704,6 @@ if __name__ == '__main__':
     logger.info(f"📍 SAR Analysis available: True")
     logger.info("📍 Mode: Combined Medical, Vehicle Sound, Drone Detection & SAR Analysis")
     logger.info("="*60)
-    
-    if not os.path.exists(FRONTEND_DIR):
-        logger.warning("❌ WARNING: Frontend directory not found!")
-        logger.warning("Please make sure your HTML files are in the correct location")
     
     if not ecg_model_loaded:
         logger.warning("⚠️  WARNING: ECG Model failed to load. ECG classification will not work.")
@@ -1800,5 +1718,7 @@ if __name__ == '__main__':
     
     logger.info("✅ Drone Detection system ready with YAMNet-compatible simulation")
     logger.info("✅ SAR Analysis system ready for TIFF and NetCDF files")
+    logger.info("✅ All systems ready!")
     
+    # IMPORTANT: Bind to 0.0.0.0 for Docker networking
     app.run(debug=True, port=5000, host='0.0.0.0')
