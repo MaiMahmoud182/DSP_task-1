@@ -1,0 +1,429 @@
+/*--------------------------------------------------------------
+# ECG Analyzer Section
+--------------------------------------------------------------*/
+.ecg-analyzer {
+    padding: 60px 0;
+}
+
+.ecg-controls {
+    background: var(--surface-color);
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+    border: 1px solid color-mix(in srgb, var(--default-color), transparent 90%);
+}
+
+.chart-container {
+    position: relative;
+    height: 400px;
+    width: 100%;
+}
+
+.chart-container-sm {
+    position: relative;
+    height: 250px;
+    width: 100%;
+}
+
+/* Stats Cards */
+.stat-card {
+    border: none;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0.5rem 0;
+}
+
+/* Timeline Controls */
+.timeline-control {
+    border: none;
+    box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+}
+
+.timeline-header h5 {
+    color: var(--heading-color);
+    font-weight: 600;
+}
+
+.timeline-info {
+    color: var(--accent-color);
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.timeline-slider .form-range::-webkit-slider-thumb {
+    background: var(--accent-color);
+    border: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.timeline-slider .form-range::-moz-range-thumb {
+    background: var(--accent-color);
+    border: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.timeline-slider .form-range::-webkit-slider-track {
+    background: color-mix(in srgb, var(--default-color), transparent 85%);
+}
+
+.timeline-slider .form-range::-moz-range-track {
+    background: color-mix(in srgb, var(--default-color), transparent 85%);
+}
+
+/* Progress Bar */
+.progress {
+    background-color: color-mix(in srgb, var(--default-color), transparent 90%);
+}
+
+.progress-bar {
+    background: linear-gradient(90deg, var(--accent-color), color-mix(in srgb, var(--accent-color), transparent 30%));
+    transition: width 0.3s ease;
+}
+
+/* Analysis Cards */
+.card {
+    border: none;
+    box-shadow: 0 2px 15px rgba(0, 0, 0, 0.08);
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: 0 5px 25px rgba(0, 0, 0, 0.15);
+}
+
+.card-title {
+    color: var(--heading-color);
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+/* PRQS Points */
+.prqs-points {
+    background: color-mix(in srgb, var(--default-color), transparent 97%);
+    padding: 15px;
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--default-color), transparent 85%);
+}
+
+/* Morphology Analysis */
+.morphology-analysis {
+    background: color-mix(in srgb, var(--default-color), transparent 98%);
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid var(--accent-color);
+}
+
+/* Classification Result */
+.classification-result {
+    background: linear-gradient(135deg, var(--accent-color), color-mix(in srgb, var(--accent-color), transparent 20%));
+    color: var(--contrast-color);
+    padding: 20px;
+    border-radius: 10px;
+    margin: 15px 0;
+}
+
+.classification-result.abnormal {
+    background: linear-gradient(135deg, #dc3545, color-mix(in srgb, #dc3545, transparent 20%));
+}
+
+/* Buttons */
+.btn {
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.btn-primary {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+}
+
+.btn-primary:hover {
+    background: color-mix(in srgb, var(--accent-color), transparent 15%);
+    border-color: color-mix(in srgb, var(--accent-color), transparent 15%);
+    transform: translateY(-2px);
+}
+
+.btn-outline-primary {
+    color: var(--accent-color);
+    border-color: var(--accent-color);
+}
+
+.btn-outline-primary:hover {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    transform: translateY(-2px);
+}
+
+.btn-outline-success {
+    color: #198754;
+    border-color: #198754;
+}
+
+.btn-outline-success:hover {
+    background: #198754;
+    border-color: #198754;
+    transform: translateY(-2px);
+}
+
+/* Form Controls */
+.form-control, .form-select {
+    border: 1px solid color-mix(in srgb, var(--default-color), transparent 80%);
+    border-radius: 6px;
+    transition: all 0.3s ease;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--accent-color), transparent 80%);
+}
+
+/* Loading Animation */
+.loading {
+    background: var(--surface-color);
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--default-color), transparent 85%);
+}
+
+/* Help Box */
+.help-box {
+    background: var(--accent-color);
+    color: var(--contrast-color);
+    margin-top: 30px;
+    padding: 30px 15px;
+    border-radius: 10px;
+    text-align: center;
+}
+
+.help-box .help-icon {
+    font-size: 48px;
+    margin-bottom: 15px;
+}
+
+.help-box h4,
+.help-box a {
+    color: var(--contrast-color);
+}
+
+.help-box a:hover {
+    color: color-mix(in srgb, var(--contrast-color), transparent 20%);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .chart-container {
+        height: 300px;
+    }
+    
+    .chart-container-sm {
+        height: 200px;
+    }
+    
+    .stat-value {
+        font-size: 1.25rem;
+    }
+    
+    .ecg-controls {
+        padding: 20px;
+    }
+    
+    .prqs-points {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    
+    .prqs-points > div {
+        flex: 0 0 calc(33.333% - 10px);
+    }
+}
+
+@media (max-width: 576px) {
+    .chart-container {
+        height: 250px;
+    }
+    
+    .chart-container-sm {
+        height: 180px;
+    }
+    
+    .stat-card .card-body {
+        padding: 15px 10px;
+    }
+    
+    .stat-value {
+        font-size: 1.1rem;
+    }
+}
+
+/* Animation for charts */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.card {
+    animation: fadeIn 0.5s ease-out;
+}
+
+/* Custom scrollbar for charts */
+.chart-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chart-container::-webkit-scrollbar-track {
+    background: color-mix(in srgb, var(--default-color), transparent 95%);
+}
+
+.chart-container::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--default-color), transparent 70%);
+    border-radius: 3px;
+}
+
+.chart-container::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--default-color), transparent 50%);
+}
+
+
+/* Enhanced Full-Width Layout */
+.ecg-analyzer .container {
+    max-width: 100%;
+    padding: 0 20px;
+}
+
+/* Lead Selection Styling */
+.lead-selection-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+}
+
+.lead-checkbox {
+    margin-right: 8px;
+}
+
+.form-check-label {
+    font-weight: 500;
+    cursor: pointer;
+}
+
+/* Enhanced Card Styling */
+.card {
+    border: none;
+    box-shadow: 0 2px 15px rgba(0, 0, 0, 0.08);
+    transition: all 0.3s ease;
+    margin-bottom: 20px;
+}
+
+.card:hover {
+    box-shadow: 0 5px 25px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+}
+
+.card-title {
+    color: var(--heading-color);
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+/* Enhanced Controls */
+.ecg-controls {
+    background: var(--surface-color);
+    padding: 25px;
+    border-radius: 10px;
+    box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+    border: 1px solid color-mix(in srgb, var(--default-color), transparent 90%);
+}
+
+/* Stats Cards Enhancement */
+.stat-card {
+    border: none;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    height: 100%;
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0.5rem 0;
+}
+
+/* Chart Containers */
+.chart-container {
+    position: relative;
+    height: 500px; /* Increased height for full-width */
+    width: 100%;
+}
+
+.chart-container-sm {
+    position: relative;
+    height: 300px; /* Increased height */
+    width: 100%;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .ecg-analyzer .container {
+        padding: 0 15px;
+    }
+    
+    .ecg-controls {
+        padding: 20px;
+    }
+    
+    .chart-container {
+        height: 400px;
+    }
+    
+    .chart-container-sm {
+        height: 250px;
+    }
+    
+    .lead-selection .row .col-md-2 {
+        flex: 0 0 50%;
+        max-width: 50%;
+    }
+}
+
+@media (max-width: 576px) {
+    .chart-container {
+        height: 300px;
+    }
+    
+    .chart-container-sm {
+        height: 200px;
+    }
+    
+    .lead-selection .row .col-md-2 {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+    
+    .ecg-controls .btn {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+}
+
+
