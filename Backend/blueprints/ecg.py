@@ -183,7 +183,7 @@ def preprocess_ecg_for_model(df_dict):
         traceback.print_exc()
         return None
 
-def classify_with_ecg_model(df_dict):
+def classify_with_ecg_model(df_dict, model_instance):
     """Classify ECG using your trained model with your exact logic"""
     try:
         # Preprocess data
@@ -191,12 +191,12 @@ def classify_with_ecg_model(df_dict):
         if ecg_input is None:
             raise Exception("Preprocessing failed")
         
-        # Run prediction
+        # Run prediction using the passed model instance
         logger.info("🧠 Running model prediction...")
-        probs = model.predict(ecg_input, verbose=0)
+        probs = model_instance.predict(ecg_input, verbose=0)
         logger.info(f"✅ Model prediction completed: {probs[0]}")
         
-        # Classification logic
+        # Rest of your classification logic remains the same...
         predictions = []
         max_prob = 0
         max_condition = ""
@@ -214,10 +214,8 @@ def classify_with_ecg_model(df_dict):
                 max_prob = prob_float
                 max_condition = label
         
-        # Sort by probability (descending)
         predictions.sort(key=lambda x: x['probability'], reverse=True)
         
-        # If all probabilities < 0.2 → Normal, else highest probability
         if all(p['probability'] < NORMAL_THRESHOLD for p in predictions):
             primary_diagnosis = "Normal ECG"
             is_normal = True
@@ -244,7 +242,6 @@ def classify_with_ecg_model(df_dict):
         logger.error(f"❌ Error in model classification: {e}")
         traceback.print_exc()
         raise e
-
 def detect_r_peaks(signal_data, sampling_rate=360):
     """Detect R peaks in ECG signal"""
     if len(signal_data) == 0:
@@ -384,6 +381,14 @@ def classify_ecg():
     logger.info("\n🧠 ECG CLASSIFICATION ENDPOINT CALLED")
     
     try:
+        # Get the model from Flask's current_app config
+        from flask import current_app
+        model_instance = current_app.config.get('ECG_MODEL')
+        
+        if model_instance is None:
+            logger.error("❌ ECG Model not found in app config")
+            return jsonify({'error': 'ECG Model not loaded. Please check server logs.'}), 500
+        
         data = request.get_json()
         
         if not data or 'ecg_data' not in data:
@@ -404,12 +409,8 @@ def classify_ecg():
             'shape': [len(ecg_leads[0]), 12]
         }
         
-        # Check if model is loaded
-        if model is None:
-            return jsonify({'error': 'ECG Model not loaded. Please check server logs.'}), 500
-        
-        # Classify using your model
-        classification_result = classify_with_ecg_model(df_dict)
+        # Classify using your model - pass model explicitly
+        classification_result = classify_with_ecg_model(df_dict, model_instance)
         
         logger.info(f"✅ ECG classification completed!")
         logger.info(f"🏥 Primary diagnosis: {classification_result['primary_diagnosis']}")
