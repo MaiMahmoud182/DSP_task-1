@@ -45,7 +45,7 @@ else:
 
 # Store model globally in config (optional but clean)
 app.config['ECG_MODEL'] = ecg_model
-app.config['ECG_MODEL'] = load_ecg_model()
+#app.config['ECG_MODEL'] = load_ecg_model()
 init_ecg_blueprint(app)
 # ==================================================
 # ✅ Register Blueprints
