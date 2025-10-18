@@ -29,7 +29,7 @@ app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 1 GB max upload
 # ✅ Import Blueprints and Load Models
 # ==================================================
 from blueprints.doppler import doppler_bp
-from blueprints.ecg import ecg_bp, load_ecg_model
+from blueprints.ecg import ecg_bp, load_ecg_model , init_ecg_blueprint
 from blueprints.eeg import eeg_bp
 from blueprints.drone import drone_bp
 from blueprints.sar import sar_bp
@@ -46,6 +46,7 @@ else:
 # Store model globally in config (optional but clean)
 app.config['ECG_MODEL'] = ecg_model
 app.config['ECG_MODEL'] = load_ecg_model()
+init_ecg_blueprint(app)
 # ==================================================
 # ✅ Register Blueprints
 # ==================================================
