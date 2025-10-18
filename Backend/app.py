@@ -87,7 +87,7 @@ def health_check():
         'endpoints': {
             'ecg': ['/api/ecg/upload', '/api/ecg/classify'],
             'eeg': ['/api/eeg/upload', '/api/eeg/classify'],
-            'doppler': ['/api/generate-doppler-sound', '/api/analyze-vehicle-sound'],
+            'doppler': ['/api/generate-doppler-sound', '/api/analyze-vehicle-sound','/api/get-spectrogram','/api/get-resampled-audio'],
             'drone': ['/api/drone/upload-audio', '/api/drone/classify'],
             'sar': ['/api/sar/analyze']
         }

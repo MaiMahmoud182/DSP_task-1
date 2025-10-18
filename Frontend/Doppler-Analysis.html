@@ -42,6 +42,10 @@
         .mode-tab { cursor: pointer; }
         .mode-tab.active { background-color: #007bff; color: white; }
         .uploaded-file-info { background: #f8f9fa; padding: 1rem; border-radius: 0.375rem; }
+        /* NEW: Aliasing visualization styles */
+        .sampling-warning { border-left: 4px solid #dc3545; background-color: #fff5f5; }
+        .sampling-safe { border-left: 4px solid #28a745; background-color: #f8fff9; }
+        .nyquist-status { font-size: 0.85rem; margin-top: 0.25rem; }
     </style>
 </head>
 
@@ -138,6 +142,21 @@
                                             <option value="10">10 seconds</option>
                                         </select>
                                     </div>
+                                    <!-- NEW: Sampling Rate Control for Generation -->
+                                    <div class="col-md-6">
+                                        <label class="form-label">Sampling Rate (Nyquist Test)</label>
+                                        <input type="range" id="samplingRate" class="form-range" min="50" max="4000" value="3000" step="100">
+                                        <div class="d-flex justify-content-between">
+                                            <small>50 Hz</small>
+                                            <span id="samplingRateValue">3000 Hz</span>
+                                            <small>4000 Hz</small>
+                                        </div>
+                                        <div class="nyquist-status">
+                                            <small class="form-text text-muted">
+                                                <span id="nyquistStatus" class="badge bg-success">Safe: Above Nyquist</span>
+                                            </small>
+                                        </div>
+                                    </div>
                                     <div class="col-12">
                                         <div class="d-flex gap-2 flex-wrap">
                                             <button id="generateBtn" class="btn btn-primary">
@@ -190,6 +209,21 @@
                                             <option value="frequency">Frequency Tracking</option>
                                             <option value="hybrid">Hybrid Analysis</option>
                                         </select>
+                                    </div>
+                                    <!-- NEW: Sampling Rate Control for Analysis -->
+                                    <div class="col-md-6">
+                                        <label class="form-label">Analysis Sampling Rate (Nyquist Test)</label>
+                                        <input type="range" id="analysisSamplingRate" class="form-range" min="100" max="48000" value="44100" step="100">
+                                        <div class="d-flex justify-content-between">
+                                            <small>100 Hz</small>
+                                            <span id="analysisSamplingRateValue">44100 Hz</span>
+                                            <small>48000 Hz</small>
+                                        </div>
+                                        <div class="nyquist-status">
+                                            <small class="form-text text-muted">
+                                                <span id="analysisNyquistStatus" class="badge bg-success">Safe: CD Quality</span>
+                                            </small>
+                                        </div>
                                     </div>
                                     <div class="col-12">
                                         <div class="d-flex gap-2 flex-wrap">
@@ -305,16 +339,55 @@
     </main>
 
     <footer id="footer" class="footer">
+        <div class="container footer-top">
+            <div class="row gy-4">
+                <div class="col-lg-4 col-md-6 footer-about">
+                    <a href="index.html" class="d-flex align-items-center">
+                        <img src="assets/img/logodsp2.png" alt="Logo" style="max-height: 40px;">
+                    </a>
+                    <div class="footer-contact pt-3">
+                        <p class="mt-3"><strong>Phone:</strong> <span>+1 5589 55488 55</span></p>
+                        <p><strong>Email:</strong> <span>info@example.com</span></p>
+                    </div>
+                </div>
 
-    <div class="container copyright text-center mt-4">
-      <p>© <span>Copyright</span> <strong class="px-1 sitename">The7th</strong> <span>All Rights Reserved</span></p>
-      <div class="credits">
-        <!-- All the links in the footer should remain intact. -->
-        <!-- You can delete the links only if you've purchased the pro version. -->
-        <!-- Licensing information: https://bootstrapmade.com/license/ -->
-        <!-- Purchase the pro version with working PHP/AJAX contact form: [buy-url] -->
-      </div>
-    </div>
+                <div class="col-lg-2 col-md-3 footer-links">
+                    <h4>Useful Links</h4>
+                    <ul>
+                        <li><i class="bi bi-chevron-right"></i> <a href="index.html">Home</a></li>
+                        <li><i class="bi bi-chevron-right"></i> <a href="index.html#about">About us</a></li>
+                        <li><i class="bi bi-chevron-right"></i> <a href="index.html#services">Services</a></li>
+                        <li><i class="bi bi-chevron-right"></i> <a href="#">Terms of service</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-lg-2 col-md-3 footer-links">
+                    <h4>Our Services</h4>
+                    <ul>
+                        <li><i class="bi bi-chevron-right"></i> <a href="Doppler-Analysis.html">Doppler Analysis</a></li>
+                        <li><i class="bi bi-chevron-right"></i> <a href="#">Signal Processing</a></li>
+                        <li><i class="bi bi-chevron-right"></i> <a href="#">Audio Analysis</a></li>
+                        <li><i class="bi bi-chevron-right"></i> <a href="#">Vehicle Detection</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-lg-4 col-md-12">
+                    <h4>Follow Us</h4>
+                    <p>Advanced signal processing solutions for real-world applications</p>
+                    <div class="social-links d-flex">
+                        <a href=""><i class="bi bi-twitter-x"></i></a>
+                        <a href=""><i class="bi bi-facebook"></i></a>
+                        <a href=""><i class="bi bi-instagram"></i></a>
+                        <a href=""><i class="bi bi-linkedin"></i></a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="container copyright text-center mt-4">
+            <p>© <span>Copyright</span> <strong class="px-1">SignalAnalyzer</strong> <span>All Rights Reserved</span></p>
+        </div>
+    </footer>
 
     <!-- Vendor JS Files -->
     <script src="assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
