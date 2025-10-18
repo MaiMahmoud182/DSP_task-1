@@ -1,4 +1,4 @@
-// ecg-analyzer.js - Complete Fixed Version with EXACT Polar Graph like first code
+// ecg-analyzer.js - Complete Fixed Version with Dynamic Resampling & AI Classification
 class ECGAnalyzer {
   constructor() {
     this.ecgData = null;
@@ -33,13 +33,20 @@ class ECGAnalyzer {
     this.animationSpeed = 100;
     this.animationStep = 0.1;
     
+    // Resampling properties
+    this.originalSamplingRate = 360;
+    this.currentSamplingRate = 360;
+    this.resamplingHistory = [];
+    this.maxHistoryPoints = 10;
+    this.currentResampledData = null;
+    
     this.lastClassificationResult = null;
     
     this.initializeEventListeners();
     this.initializePlots();
     this.generateLeadCheckboxes();
     this.initializeKeyboardControls();
-}
+  }
 
   initializeEventListeners() {
     // File and basic controls
@@ -164,6 +171,7 @@ class ECGAnalyzer {
     this.initializePolarPlot();
     this.initializeRecurrencePlot();
     this.initializeProbabilityPlot();
+    this.initializeResamplingHistoryPlot();
   }
 
   initializeMainPlot() {
@@ -252,6 +260,22 @@ class ECGAnalyzer {
     Plotly.newPlot("probabilityChart", [], layout, { responsive: true });
   }
 
+  initializeResamplingHistoryPlot() {
+    const historyChart = document.getElementById("resamplingHistoryChart");
+    if (!historyChart) return;
+
+    const layout = {
+      title: "AI Confidence vs Sampling Rate",
+      xaxis: { title: "Sampling Rate (Hz)" },
+      yaxis: { title: "Confidence (%)", range: [0, 100] },
+      showlegend: false,
+      height: 200,
+      margin: { l: 50, r: 30, t: 50, b: 50 }
+    };
+
+    Plotly.newPlot("resamplingHistoryChart", [], layout, { responsive: true });
+  }
+
   async handleFileUpload(event) {
     const files = event.target.files;
     if (files.length === 0) {
@@ -287,6 +311,15 @@ class ECGAnalyzer {
       console.log("✅ Upload successful:", result);
 
       this.ecgData = result.data;
+      this.originalSamplingRate = this.samplingRate;
+      this.currentSamplingRate = this.samplingRate;
+      this.currentResampledData = null;
+      this.resamplingHistory = [];
+
+      // Initialize resampling controls if not already done
+      if (!document.getElementById('samplingRateSlider')) {
+        this.initializeResamplingControls();
+      }
 
       // Enable buttons
       const classifyBtn = document.getElementById("classifyBtn");
@@ -308,6 +341,385 @@ class ECGAnalyzer {
       this.showMessage("Error: " + error.message, "error");
     } finally {
       this.showLoading(false);
+    }
+  }
+
+  initializeResamplingControls() {
+    // Create resampling controls HTML
+    const controlsContainer = document.querySelector('.ecg-controls .row');
+    if (!controlsContainer) return;
+    
+    const resamplingHTML = `
+        <div class="col-md-12 mt-3">
+            <div class="card resampling-controls">
+                <div class="card-body">
+                    <h6 class="card-title mb-3">Dynamic Resampling & AI Analysis</h6>
+                    <div class="row g-3 align-items-center">
+                        <div class="col-md-4">
+                            <label class="form-label">Sampling Rate: <span id="currentSamplingRateDisplay">${this.currentSamplingRate} Hz</span></label>
+                            <input type="range" id="samplingRateSlider" class="form-range sampling-rate-slider" 
+                                   min="100" max="1000" step="10" value="${this.currentSamplingRate}">
+                            <div class="d-flex justify-content-between">
+                                <small>100 Hz</small>
+                                <small>1000 Hz</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Resampling Type</label>
+                            <select id="resamplingType" class="form-select">
+                                <option value="auto">Auto (Smart)</option>
+                                <option value="downsample">Downsample Only</option>
+                                <option value="upsample">Upsample Only</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">AI Confidence</label>
+                            <div id="aiConfidence" class="fw-bold text-primary">--%</div>
+                        </div>
+                        <div class="col-md-2">
+                            <button id="resampleBtn" class="btn btn-outline-warning mt-3">
+                                <i class="bi bi-arrow-repeat me-1"></i>Apply
+                            </button>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-12">
+                            <div class="form-text">
+                                Original: ${this.originalSamplingRate}Hz | 
+                                Current: <span id="currentRateDisplay">${this.currentSamplingRate}Hz</span> | 
+                                Factor: <span id="resamplingFactor">1.0x</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Insert resampling controls
+    controlsContainer.insertAdjacentHTML('beforeend', resamplingHTML);
+    
+    // Add event listeners
+    const samplingRateSlider = document.getElementById('samplingRateSlider');
+    const resampleBtn = document.getElementById('resampleBtn');
+    const resamplingType = document.getElementById('resamplingType');
+    
+    if (samplingRateSlider) {
+        samplingRateSlider.addEventListener('input', (e) => {
+            this.updateSamplingRateDisplay(parseInt(e.target.value));
+        });
+    }
+    
+    if (resampleBtn) {
+        resampleBtn.addEventListener('click', () => this.applyResampling());
+    }
+    
+    if (resamplingType) {
+        resamplingType.addEventListener('change', (e) => {
+            this.updateResamplingConstraints(e.target.value);
+        });
+    }
+  }
+
+  updateSamplingRateDisplay(rate) {
+    this.currentSamplingRate = rate;
+    
+    const display = document.getElementById('currentSamplingRateDisplay');
+    const currentRateDisplay = document.getElementById('currentRateDisplay');
+    const factorDisplay = document.getElementById('resamplingFactor');
+    
+    if (display) display.textContent = `${rate} Hz`;
+    if (currentRateDisplay) currentRateDisplay.textContent = `${rate}Hz`;
+    if (factorDisplay) {
+        const factor = (rate / this.originalSamplingRate).toFixed(2);
+        factorDisplay.textContent = `${factor}x`;
+    }
+  }
+
+  updateResamplingConstraints(type) {
+    const slider = document.getElementById('samplingRateSlider');
+    if (!slider) return;
+    
+    switch (type) {
+        case 'downsample':
+            slider.min = '100';
+            slider.max = this.originalSamplingRate.toString();
+            break;
+        case 'upsample':
+            slider.min = this.originalSamplingRate.toString();
+            slider.max = '1000';
+            break;
+        default: // auto
+            slider.min = '100';
+            slider.max = '1000';
+    }
+    
+    // Ensure current value is within new constraints
+    let currentValue = parseInt(slider.value);
+    const min = parseInt(slider.min);
+    const max = parseInt(slider.max);
+    
+    if (currentValue < min) {
+        slider.value = min;
+        this.updateSamplingRateDisplay(min);
+    } else if (currentValue > max) {
+        slider.value = max;
+        this.updateSamplingRateDisplay(max);
+    }
+  }
+
+  async applyResampling() {
+    if (!this.ecgData) {
+        this.showMessage("Please upload ECG data first", "error");
+        return;
+    }
+
+    this.showLoading(true);
+
+    try {
+        console.log(`🔄 Resampling from ${this.originalSamplingRate}Hz to ${this.currentSamplingRate}Hz...`);
+
+        const response = await fetch("http://localhost:5000/api/ecg/resample-classify", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                ecg_data: this.ecgData.leads,
+                original_rate: this.originalSamplingRate,
+                target_rate: this.currentSamplingRate,
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Resampling failed: ${response.status}`);
+        }
+
+        const result = await response.json();
+        console.log("✅ Resampling and classification successful:", result);
+
+        // Update display with resampled data
+        this.updateDisplayWithResampledData(result);
+        
+        // Add to history
+        this.addToResamplingHistory(result);
+        
+        // Update confidence visualization
+        this.updateConfidenceVisualization();
+
+        this.showMessage(`Resampled to ${this.currentSamplingRate}Hz and classified successfully!`, "success");
+
+    } catch (error) {
+        console.error("💥 Resampling error:", error);
+        this.showMessage("Error during resampling: " + error.message, "error");
+    } finally {
+        this.showLoading(false);
+    }
+  }
+
+  updateDisplayWithResampledData(result) {
+    // Update the current ECG data with resampled version for display
+    if (result.classification && result.resampling_info) {
+        // Store resampled data temporarily for display
+        this.currentResampledData = {
+            leads: result.resampled_data || this.ecgData.leads,
+            sampling_rate: result.resampling_info.target_rate,
+            classification: result.classification
+        };
+        
+        // Update sampling rate dropdown to reflect current rate
+        const samplingRateSelect = document.getElementById('samplingRate');
+        if (samplingRateSelect) {
+            samplingRateSelect.value = result.resampling_info.target_rate;
+        }
+        
+        // Update classification display
+        this.displayClassificationResult(result.classification);
+        this.updateProbabilityChart(result.classification);
+        
+        // Update main display
+        this.updateDisplay();
+        
+        // Update confidence display
+        const confidenceElement = document.getElementById('aiConfidence');
+        if (confidenceElement && result.classification.confidence) {
+            const confidencePercent = (result.classification.confidence * 100).toFixed(1);
+            confidenceElement.textContent = `${confidencePercent}%`;
+            
+            // Color code based on confidence
+            if (result.classification.confidence > 0.8) {
+                confidenceElement.className = 'fw-bold text-success';
+            } else if (result.classification.confidence > 0.6) {
+                confidenceElement.className = 'fw-bold text-warning';
+            } else {
+                confidenceElement.className = 'fw-bold text-danger';
+            }
+        }
+    }
+  }
+
+  addToResamplingHistory(result) {
+    if (!result.resampling_info || !result.classification) return;
+    
+    const historyPoint = {
+        timestamp: new Date().toLocaleTimeString(),
+        sampling_rate: result.resampling_info.target_rate,
+        resampling_factor: result.resampling_info.resampling_factor,
+        confidence: result.classification.confidence || 0,
+        diagnosis: result.classification.primary_diagnosis,
+        is_normal: result.classification.is_normal
+    };
+    
+    this.resamplingHistory.unshift(historyPoint);
+    
+    // Keep only recent history
+    if (this.resamplingHistory.length > this.maxHistoryPoints) {
+        this.resamplingHistory = this.resamplingHistory.slice(0, this.maxHistoryPoints);
+    }
+    
+    this.updateResamplingHistoryChart();
+  }
+
+  updateResamplingHistoryChart() {
+    const historyContainer = document.getElementById('resamplingHistoryChart');
+    if (!historyContainer || this.resamplingHistory.length === 0) return;
+    
+    const samplingRates = this.resamplingHistory.map(point => point.sampling_rate);
+    const confidences = this.resamplingHistory.map(point => point.confidence * 100);
+    const diagnoses = this.resamplingHistory.map(point => point.diagnosis);
+    
+    const colors = this.resamplingHistory.map(point => 
+        point.is_normal ? '#28a745' : '#dc3545'
+    );
+    
+    const trace = {
+        x: samplingRates,
+        y: confidences,
+        type: 'scatter',
+        mode: 'markers+lines',
+        name: 'AI Confidence',
+        marker: {
+            size: 8,
+            color: colors,
+            line: {
+                color: 'rgba(0,0,0,0.2)',
+                width: 1
+            }
+        },
+        line: {
+            color: 'rgba(100, 100, 100, 0.3)',
+            width: 1
+        },
+        hovertemplate: 
+            '<b>%{x} Hz</b><br>' +
+            'Confidence: %{y:.1f}%<br>' +
+            'Diagnosis: %{customdata}<br>' +
+            '<extra></extra>',
+        customdata: diagnoses
+    };
+    
+    const layout = {
+        title: 'AI Confidence vs Sampling Rate',
+        xaxis: {
+            title: 'Sampling Rate (Hz)',
+            type: 'linear'
+        },
+        yaxis: {
+            title: 'Confidence (%)',
+            range: [0, 100]
+        },
+        showlegend: false,
+        height: 200,
+        margin: { l: 50, r: 30, t: 50, b: 50 }
+    };
+    
+    Plotly.react('resamplingHistoryChart', [trace], layout);
+  }
+
+  updateConfidenceVisualization() {
+    // Create or update confidence visualization section
+    let confidenceSection = document.getElementById('confidenceVisualization');
+    
+    if (!confidenceSection) {
+        confidenceSection = document.createElement('div');
+        confidenceSection.id = 'confidenceVisualization';
+        confidenceSection.className = 'row mb-4';
+        confidenceSection.innerHTML = `
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Resampling Analysis</h5>
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div class="chart-container-sm">
+                                    <div id="resamplingHistoryChart"></div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div id="resamplingStats" class="text-center">
+                                    <h6>Current Analysis</h6>
+                                    <div class="mb-3">
+                                        <small class="text-muted">Sampling Rate</small>
+                                        <div class="h4 text-primary" id="currentRateStat">${this.currentSamplingRate} Hz</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <small class="text-muted">AI Confidence</small>
+                                        <div class="h4" id="currentConfidenceStat">--%</div>
+                                    </div>
+                                    <div>
+                                        <small class="text-muted">Signal Quality</small>
+                                        <div class="progress mt-1" style="height: 8px">
+                                            <div id="signalQualityBar" class="progress-bar" style="width: 0%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Insert after classification results
+        const classificationSection = document.querySelector('.row.mb-4[data-aos-delay="300"]');
+        if (classificationSection) {
+            classificationSection.parentNode.insertBefore(confidenceSection, classificationSection.nextSibling);
+        }
+    }
+    
+    // Update stats
+    this.updateResamplingStats();
+  }
+
+  updateResamplingStats() {
+    const currentRateStat = document.getElementById('currentRateStat');
+    const currentConfidenceStat = document.getElementById('currentConfidenceStat');
+    const signalQualityBar = document.getElementById('signalQualityBar');
+    
+    if (currentRateStat) {
+        currentRateStat.textContent = `${this.currentSamplingRate} Hz`;
+    }
+    
+    if (currentConfidenceStat && this.lastClassificationResult) {
+        const confidence = (this.lastClassificationResult.confidence * 100).toFixed(1);
+        currentConfidenceStat.textContent = `${confidence}%`;
+        
+        // Color code confidence
+        if (this.lastClassificationResult.confidence > 0.8) {
+            currentConfidenceStat.className = 'h4 text-success';
+        } else if (this.lastClassificationResult.confidence > 0.6) {
+            currentConfidenceStat.className = 'h4 text-warning';
+        } else {
+            currentConfidenceStat.className = 'h4 text-danger';
+        }
+    }
+    
+    if (signalQualityBar) {
+        // Estimate signal quality based on sampling rate (higher is generally better)
+        let quality = Math.min(100, (this.currentSamplingRate / 500) * 100);
+        if (this.currentSamplingRate < 200) quality = 40; // Minimum quality for very low rates
+        signalQualityBar.style.width = `${quality}%`;
+        signalQualityBar.className = `progress-bar ${quality > 80 ? 'bg-success' : quality > 60 ? 'bg-warning' : 'bg-danger'}`;
     }
   }
 
@@ -458,8 +870,6 @@ class ECGAnalyzer {
           });
         }
         break;
-
-      // Only showing the updated polar mode controls - replace this section in your existing JS file
 
       case "polar":
         controlsContainer.innerHTML = `
@@ -628,48 +1038,50 @@ class ECGAnalyzer {
 
   updateContinuousDisplay(startSample = 0, endSample = null) {
     const mainChart = document.getElementById("mainChart");
-    if (!mainChart || !this.ecgData.leads) return;
+    if (!mainChart) return;
+
+    // Use resampled data if available, otherwise original data
+    const displayData = this.currentResampledData || this.ecgData;
+    if (!displayData.leads) return;
 
     if (!endSample) {
-      endSample = this.ecgData.leads[0].length;
+      endSample = displayData.leads[0].length;
     }
 
+    const currentSamplingRate = displayData.sampling_rate || this.samplingRate;
+    
     const traces = [];
     const colors = [
-      "#1f77b4",
-      "#ff7f0e",
-      "#2ca02c",
-      "#d62728",
-      "#9467bd",
-      "#8c564b",
-      "#e377c2",
-      "#7f7f7f",
-      "#bcbd22",
-      "#17becf",
-      "#ff9896",
-      "#98df8a",
+      "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b",
+      "#e377c2", "#7f7f7f", "#bcbd22", "#17becf", "#ff9896", "#98df8a"
     ];
 
     this.selectedLeads.forEach((leadIndex) => {
-      if (this.ecgData.leads[leadIndex]) {
-        const leadData = this.ecgData.leads[leadIndex];
+      if (displayData.leads[leadIndex]) {
+        const leadData = displayData.leads[leadIndex];
         const windowData = leadData.slice(startSample, endSample);
         const timeArray = windowData.map(
-          (_, index) => (startSample + index) / this.samplingRate
+          (_, index) => (startSample + index) / currentSamplingRate
         );
+
+        // Add resampling indicator to trace name
+        let leadName = this.leads[leadIndex];
+        if (this.currentResampledData) {
+          leadName += ` (${currentSamplingRate}Hz)`;
+        }
 
         traces.push({
           x: timeArray,
           y: windowData,
           type: "scatter",
           mode: "lines",
-          name: this.leads[leadIndex],
+          name: leadName,
           line: {
             color: colors[leadIndex % colors.length],
             width: 1.5,
           },
           hovertemplate:
-            `<b>${this.leads[leadIndex]}</b><br>` +
+            `<b>${leadName}</b><br>` +
             "Time: %{x:.2f}s<br>" +
             "Amplitude: %{y:.3f}mV<br>" +
             "<extra></extra>",
@@ -678,9 +1090,7 @@ class ECGAnalyzer {
     });
 
     const layout = {
-      title: `ECG Signal - ${
-        this.windowSizeSeconds
-      }s Window (${this.currentAnimationTime.toFixed(1)}s)`,
+      title: `ECG Signal - ${this.windowSizeSeconds}s Window (${this.currentAnimationTime.toFixed(1)}s) ${this.currentResampledData ? `[Resampled: ${currentSamplingRate}Hz]` : ''}`,
       xaxis: {
         title: "Time (s)",
         gridcolor: "lightgray",
@@ -786,8 +1196,7 @@ class ECGAnalyzer {
   }
 
   // UPDATED POLAR DISPLAY FUNCTION - EXACTLY LIKE YOUR FIRST CODE
- // UPDATED POLAR DISPLAY FUNCTION - EXACTLY LIKE YOUR FIRST CODE
-async updatePolarDisplay() {
+  async updatePolarDisplay() {
     const mainChart = document.getElementById('mainChart');
     if (!mainChart || !this.ecgData) return;
 
@@ -899,7 +1308,7 @@ async updatePolarDisplay() {
         
         Plotly.react('mainChart', [errorTrace], errorLayout);
     }
-}
+  }
 
   updateRecurrenceDisplay() {
     const mainChart = document.getElementById("mainChart");
@@ -966,7 +1375,13 @@ async updatePolarDisplay() {
 
     Plotly.react("mainChart", [trace], layout);
   }
-updatePolarPlot() {
+
+  updateAdvancedPlots() {
+    this.updatePolarPlot();
+    this.updateRecurrencePlot();
+  }
+
+  updatePolarPlot() {
     if (!this.ecgData || !this.ecgData.leads) return;
     
     const polarChart = document.getElementById('polarChart');
@@ -1037,149 +1452,8 @@ updatePolarPlot() {
     };
 
     Plotly.react('polarChart', traces, layout);
-}
-  updateAdvancedPlots() {
-    this.updatePolarPlot();
-    this.updateRecurrencePlot();
   }
-// UPDATED POLAR DISPLAY FUNCTION - FIXED LEAD NAME MAPPING
-async updatePolarDisplay() {
-    const mainChart = document.getElementById('mainChart');
-    if (!mainChart || !this.ecgData) return;
 
-    try {
-        console.log('🔄 Fetching polar data...');
-        
-        // Fetch polar data from server - EXACTLY like your first code
-        const response = await fetch(`http://localhost:5000/api/get_polar_data/${this.polarMode}?current_time=${this.currentAnimationTime}`);
-        
-        console.log('📡 Polar response status:', response.status);
-        
-        if (!response.ok) {
-            let errorMessage = `Failed to fetch polar data: ${response.status}`;
-            try {
-                const errorData = await response.json();
-                errorMessage = errorData.error || errorMessage;
-            } catch (e) {
-                errorMessage = response.statusText || errorMessage;
-            }
-            throw new Error(errorMessage);
-        }
-
-        const data = await response.json();
-        console.log('✅ Polar data received:', Object.keys(data));
-        
-        const traces = [];
-        const colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', 
-                        '#e377c2', '#7f7f7f', '#bcbd22', '#17becf', '#ff9896', '#98df8a'];
-
-        // Use ONLY the selected polar leads, not the main selected leads
-        this.selectedPolarLeads.forEach((leadIndex, colorIndex) => {
-            const leadName = this.leads[leadIndex];
-            
-            // Map frontend lead names to backend lead names
-            const backendLeadName = this.mapLeadNameToBackend(leadName);
-            
-            if (data[backendLeadName]) {
-                const leadData = data[backendLeadName];
-                
-                console.log(`📊 Lead ${leadName} (backend: ${backendLeadName}): ${leadData.r.length} points`);
-                
-                traces.push({
-                    type: "scatterpolar",
-                    r: leadData.r,
-                    theta: leadData.theta,
-                    mode: "lines",
-                    name: leadName, // Use frontend name for display
-                    line: {
-                        color: colors[leadIndex % colors.length], // Use lead index for consistent colors
-                        width: 1.5
-                    },
-                    hovertemplate: 
-                        `<b>${leadName}</b><br>` +
-                        'Angle: %{theta:.1f}°<br>' +
-                        'Radius: %{r:.3f}<br>' +
-                        '<extra></extra>'
-                });
-            } else {
-                console.warn(`⚠️ Lead ${leadName} (backend: ${backendLeadName}) not found in polar data. Available leads:`, Object.keys(data));
-            }
-        });
-
-        if (traces.length === 0) {
-            throw new Error('No valid lead data found for polar plot. Please select at least one lead.');
-        }
-
-        const layout = {
-            title: `ECG Polar Viewer - ${this.polarMode === 'fixed' ? 'Fixed Window' : 'Cumulative'} Mode (${this.currentAnimationTime.toFixed(1)}s)`,
-            polar: {
-                radialaxis: { visible: false },
-                angularaxis: { 
-                    direction: "clockwise", 
-                    rotation: 90,
-                    tickmode: "array",
-                    tickvals: [0, 45, 90, 135, 180, 225, 270, 315],
-                    ticktext: ['0°', '45°', '90°', '135°', '180°', '225°', '270°', '315°']
-                }
-            },
-            showlegend: true,
-            height: 400,
-            margin: { l: 40, r: 40, t: 60, b: 40 },
-            template: "plotly_white"
-        };
-
-        Plotly.react('mainChart', traces, layout);
-        console.log('✅ Polar plot updated successfully');
-        
-    } catch (error) {
-        console.error('💥 Error updating polar display:', error);
-        this.showMessage('Error loading polar data: ' + error.message, 'error');
-        
-        // Fallback: Show error message on chart
-        const errorTrace = {
-            type: "scatterpolar",
-            r: [0, 0.5, 1],
-            theta: [0, 120, 240],
-            mode: "markers",
-            name: "Error",
-            marker: {
-                size: 10,
-                color: 'red'
-            }
-        };
-        
-        const errorLayout = {
-            title: 'Error Loading Polar Data',
-            polar: {
-                radialaxis: { visible: true, range: [0, 1] },
-                angularaxis: { direction: "clockwise", rotation: 90 }
-            },
-            height: 400
-        };
-        
-        Plotly.react('mainChart', [errorTrace], errorLayout);
-    }
-}
-
-// ADD THIS NEW METHOD TO YOUR CLASS - Map frontend lead names to backend lead names
-mapLeadNameToBackend(frontendLeadName) {
-    const leadMapping = {
-        'I': 'I',
-        'II': 'II', 
-        'III': 'III',
-        'aVR': 'AVR',
-        'aVL': 'AVL',
-        'aVF': 'AVF',
-        'V1': 'V1',
-        'V2': 'V2',
-        'V3': 'V3',
-        'V4': 'V4',
-        'V5': 'V5',
-        'V6': 'V6'
-    };
-    
-    return leadMapping[frontendLeadName] || frontendLeadName.toUpperCase();
-}
   updateRecurrencePlot() {
     if (!this.ecgData || !this.ecgData.leads) return;
 
@@ -1775,6 +2049,7 @@ mapLeadNameToBackend(frontendLeadName) {
             document.getElementById("signalDuration")?.textContent || "N/A",
         },
         classification: this.lastClassificationResult || null,
+        resamplingHistory: this.resamplingHistory
       };
 
       const blob = new Blob([JSON.stringify(results, null, 2)], {
@@ -1804,6 +2079,11 @@ mapLeadNameToBackend(frontendLeadName) {
     this.currentAnimationTime = 0;
     this.isAnimating = false;
     this.animationId = null;
+
+    // Reset resampling
+    this.currentResampledData = null;
+    this.resamplingHistory = [];
+    this.currentSamplingRate = this.originalSamplingRate;
 
     const fileInput = document.getElementById("fileInput");
     if (fileInput) fileInput.value = "";
@@ -1842,6 +2122,13 @@ mapLeadNameToBackend(frontendLeadName) {
       timelineControl.style.display = "none";
     }
 
+    // Reset resampling controls
+    const samplingRateSlider = document.getElementById("samplingRateSlider");
+    if (samplingRateSlider) {
+      samplingRateSlider.value = this.originalSamplingRate;
+    }
+    this.updateSamplingRateDisplay(this.originalSamplingRate);
+
     this.showMessage("Analyzer reset successfully", "info");
   }
 
@@ -1851,6 +2138,7 @@ mapLeadNameToBackend(frontendLeadName) {
       "polarChart",
       "recurrenceChart",
       "probabilityChart",
+      "resamplingHistoryChart"
     ];
     charts.forEach((chartId) => {
       const chart = document.getElementById(chartId);

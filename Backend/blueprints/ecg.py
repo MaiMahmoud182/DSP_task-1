@@ -182,7 +182,6 @@ def preprocess_ecg_for_model(df_dict):
         logger.error(f"❌ Error preprocessing ECG data: {e}")
         traceback.print_exc()
         return None
-
 def classify_with_ecg_model(df_dict, model_instance):
     """Classify ECG using your trained model with your exact logic"""
     try:
@@ -421,7 +420,8 @@ def classify_ecg():
         logger.error(f"💥 ECG classification error: {e}")
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
-
+    
+    
 @ecg_bp.route('/polar-data/<mode>', methods=['GET'])
 def get_polar_data(mode):
     """Get polar plot data with fixed or cumulative mode"""
@@ -553,8 +553,136 @@ def get_ecg_statistics():
         
     except Exception as e:
         logger.error(f"Error getting ECG statistics: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e)}), 500 
+#==================================================================================
+@ecg_bp.route('/resample', methods=['POST'])
+def resample_ecg():
+    """Resample ECG data to new sampling rate"""
+    try:
+        data = request.get_json()
+        
+        if not data or 'ecg_data' not in data or 'original_rate' not in data or 'target_rate' not in data:
+            return jsonify({'error': 'Missing required parameters'}), 400
+        
+        ecg_leads = data['ecg_data']
+        original_rate = data['original_rate']
+        target_rate = data['target_rate']
+        
+        if original_rate == target_rate:
+            # No resampling needed
+            return jsonify({
+                'resampled_data': ecg_leads,
+                'original_rate': original_rate,
+                'target_rate': target_rate,
+                'resampling_factor': 1.0
+            })
+        
+        # Resample each lead
+        resampled_leads = []
+        for lead_data in ecg_leads:
+            resampled_lead = resample_signal(lead_data, original_rate, target_rate)
+            resampled_leads.append(resampled_lead)
+        
+        return jsonify({
+            'resampled_data': resampled_leads,
+            'original_rate': original_rate,
+            'target_rate': target_rate,
+            'resampling_factor': target_rate / original_rate,
+            'message': f'Successfully resampled from {original_rate}Hz to {target_rate}Hz'
+        })
+        
+    except Exception as e:
+        logger.error(f"Resampling error: {str(e)}")
+        return jsonify({'error': f'Resampling failed: {str(e)}'}), 500
 
+@ecg_bp.route('/resample-classify', methods=['POST'])
+def resample_and_classify():
+    """Resample ECG and run classification in one step"""
+    try:
+        data = request.get_json()
+        
+        if not data or 'ecg_data' not in data or 'original_rate' not in data or 'target_rate' not in data:
+            return jsonify({'error': 'Missing required parameters'}), 400
+        
+        # Get the model from Flask's current_app config
+        from flask import current_app
+        model_instance = current_app.config.get('ECG_MODEL')
+        
+        if model_instance is None:
+            return jsonify({'error': 'ECG Model not loaded'}), 500
+        
+        ecg_leads = data['ecg_data']
+        original_rate = data['original_rate']
+        target_rate = data['target_rate']
+        
+        # Resample the data
+        resampled_leads = []
+        for lead_data in ecg_leads:
+            resampled_lead = resample_signal(lead_data, original_rate, target_rate)
+            resampled_leads.append(resampled_lead)
+        
+        # Prepare for classification
+        df_dict = {
+            'columns': ['I', 'II', 'III', 'AVR', 'AVL', 'AVF', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6'],
+            'data': list(zip(*resampled_leads)),
+            'shape': [len(resampled_leads[0]), 12]
+        }
+        
+        # Classify resampled data
+        classification_result = classify_with_ecg_model(df_dict, model_instance)
+        
+        return jsonify({
+            'classification': classification_result,
+            'resampling_info': {
+                'original_rate': original_rate,
+                'target_rate': target_rate,
+                'resampling_factor': target_rate / original_rate
+            },
+            'message': f'Classification completed on {target_rate}Hz resampled data'
+        })
+        
+    except Exception as e:
+        logger.error(f"Resample-classify error: {str(e)}")
+        return jsonify({'error': f'Processing failed: {str(e)}'}), 500
+
+def resample_signal(signal, original_rate, target_rate):
+    """Resample signal from original_rate to target_rate"""
+    try:
+        import numpy as np
+        from scipy import signal as scipy_signal
+        
+        signal_array = np.array(signal)
+        
+        if original_rate == target_rate:
+            return signal_array.tolist()
+        
+        # Calculate resampling factor
+        resampling_factor = target_rate / original_rate
+        num_samples = int(len(signal_array) * resampling_factor)
+        
+        # Use scipy's resample function
+        resampled_signal = scipy_signal.resample(signal_array, num_samples)
+        
+        return resampled_signal.tolist()
+        
+    except ImportError:
+        # Fallback: simple linear interpolation if scipy not available
+        logger.warning("Scipy not available, using simple interpolation")
+        return simple_resample(signal, original_rate, target_rate)
+
+def simple_resample(signal, original_rate, target_rate):
+    """Simple linear interpolation resampling"""
+    import numpy as np
+    
+    signal_array = np.array(signal)
+    original_times = np.arange(len(signal_array)) / original_rate
+    target_times = np.arange(0, len(signal_array) / original_rate, 1 / target_rate)
+    
+    # Linear interpolation
+    resampled_signal = np.interp(target_times, original_times, signal_array)
+    
+    return resampled_signal.tolist()
+#==================================================================================
 # Error handlers for this blueprint
 @ecg_bp.errorhandler(404)
 def not_found(error):

@@ -426,4 +426,69 @@
     }
 }
 
+// ======================================================
+/* Resampling Controls */
+.resampling-controls {
+    background: linear-gradient(135deg, var(--surface-color), color-mix(in srgb, var(--accent-color), transparent 98%));
+    border-left: 4px solid var(--accent-color);
+}
 
+.sampling-rate-slider {
+    background: linear-gradient(to right, #dc3545, #ffc107, #28a745);
+}
+
+.sampling-rate-slider::-webkit-slider-thumb {
+    background: var(--accent-color);
+    border: 3px solid white;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.sampling-rate-slider::-moz-range-thumb {
+    background: var(--accent-color);
+    border: 3px solid white;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Confidence Indicators */
+.confidence-high {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.confidence-medium {
+    color: #ffc107;
+    font-weight: bold;
+}
+
+.confidence-low {
+    color: #dc3545;
+    font-weight: bold;
+}
+
+/* Resampling History */
+.resampling-history-item {
+    border-left: 3px solid var(--accent-color);
+    padding-left: 15px;
+    margin-bottom: 10px;
+}
+
+.resampling-history-item.normal {
+    border-left-color: #28a745;
+}
+
+.resampling-history-item.abnormal {
+    border-left-color: #dc3545;
+}
+
+/* Signal Quality Indicators */
+.signal-quality-excellent {
+    background: linear-gradient(90deg, #28a745, #20c997);
+}
+
+.signal-quality-good {
+    background: linear-gradient(90deg, #20c997, #ffc107);
+}
+
+.signal-quality-poor {
+    background: linear-gradient(90deg, #ffc107, #dc3545);
+}
