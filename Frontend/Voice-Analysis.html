@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Voice Aliasing Analyzer - Human Voice Analysis</title>
+    <meta name="description" content="Advanced Voice Analysis with Aliasing Demonstration" />
+    <meta name="keywords" content="Voice Analysis, Aliasing, Signal Processing" />
+
+    <!-- Favicons -->
+    <link href="assets/img/logodsp2.png" rel="icon" />
+    <link href="assets/img/apple-touch-icon.png" rel="apple-touch-icon" />
+
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link href="https://fonts.gstatic.com" rel="preconnect" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&family=Raleway:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Ubuntu:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&display=swap" rel="stylesheet" />
+
+    <!-- Vendor CSS Files -->
+    <link href="assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="assets/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet" />
+    <link href="assets/vendor/aos/aos.css" rel="stylesheet" />
+    <link href="assets/vendor/glightbox/css/glightbox.min.css" rel="stylesheet" />
+    <link href="assets/vendor/swiper/swiper-bundle.min.css" rel="stylesheet" />
+
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+
+    <!-- Main CSS File -->
+    <link href="assets/css/main.css" rel="stylesheet" />
+    
+    <style>
+        .chart-container-sm { height: 300px; width: 100%; }
+        .chart-container { height: 400px; width: 100%; }
+        .stat-card { height: 100%; }
+        .stat-value { font-size: 1.5rem; font-weight: bold; }
+        .voice-controls { background-color: #f8f9fa; padding: 1.5rem; border-radius: 0.375rem; border: 1px solid #dee2e6; }
+        .classification-result { padding: 1rem; border-radius: 0.375rem; border: 1px solid #dee2e6; }
+        .classification-result.sampling-safe { background-color: #d1edff; }
+        .classification-result.sampling-warning { background-color: #ffe0e0; }
+        .audio-player { width: 100%; margin: 1rem 0; }
+        .uploaded-file-info { background: #f8f9fa; padding: 1rem; border-radius: 0.375rem; }
+        /* Aliasing visualization styles */
+        .sampling-warning { border-left: 4px solid #dc3545; background-color: #fff5f5; }
+        .sampling-safe { border-left: 4px solid #28a745; background-color: #f8fff9; }
+        .nyquist-status { font-size: 0.85rem; margin-top: 0.25rem; }
+        .audio-controls { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
+        .audio-controls .btn { flex: 1; min-width: 120px; }
+    </style>
+</head>
+
+<body class="service-details-page">
+    <header id="header" class="header d-flex align-items-center sticky-top">
+        <div class="container-fluid container-xl position-relative d-flex align-items-center">
+            <a href="index.html" class="logo d-flex align-items-center me-auto">
+                <img src="assets/img/logodsp2.png" alt="" />
+            </a>
+
+            <nav id="navmenu" class="navmenu">
+                <ul>
+                    <li><a href="index.html#hero">Home</a></li>
+                    <li><a href="index.html#about">About</a></li>
+                    <li><a href="index.html#services">Services</a></li>
+                    <li><a href="index.html#team">Team</a></li>
+                    <li><a href="index.html#contact">Contact</a></li>
+                </ul>
+                <i class="mobile-nav-toggle d-xl-none bi bi-list"></i>
+            </nav>
+
+            <a class="btn-getstarted" href="index.html#about">Get Started</a>
+        </div>
+    </header>
+
+    <main class="main">
+        <!-- Page Title -->
+        <div class="page-title">
+            <div class="container d-lg-flex justify-content-between align-items-center">
+                <h1 class="mb-2 mb-lg-0">Voice Aliasing Analyzer</h1>
+                <nav class="breadcrumbs">
+                    <ol>
+                        <li><a href="index.html">Home</a></li>
+                        <li><a href="index.html#services">Services</a></li>
+                        <li class="current">Voice Analyzer</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+        <!-- End Page Title -->
+
+        <!-- Voice Analyzer Section -->
+        <section id="voice-analyzer" class="voice-analyzer section light-background">
+            <div class="container">
+                <!-- Upload and Controls Section -->
+                <div class="row mb-4" data-aos="fade-up" data-aos-delay="100">
+                    <div class="col-12">
+                        <div class="voice-controls">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Upload Human Voice</label>
+                                    <input type="file" id="audioFile" class="form-control" accept=".wav,.mp3,.flac,.aac,.ogg" />
+                                    <small class="form-text text-muted">Supported formats: WAV, MP3, FLAC, AAC, OGG</small>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Analysis Sampling Rate (Aliasing Test)</label>
+                                    <input type="range" id="analysisSamplingRate" class="form-range" min="100" max="48000" value="44100" step="100">
+                                    <div class="d-flex justify-content-between">
+                                        <small>100 Hz</small>
+                                        <span id="analysisSamplingRateValue">44100 Hz</span>
+                                        <small>48000 Hz</small>
+                                    </div>
+                                    <div class="nyquist-status">
+                                        <small class="form-text text-muted">
+                                            <span id="analysisNyquistStatus" class="badge bg-success">Safe: CD Quality</span>
+                                        </small>
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        <button id="analyzeBtn" class="btn btn-primary" disabled>
+                                            <i class="bi bi-graph-up me-1"></i>Analyze Voice
+                                        </button>
+                                        <button id="playUploadedBtn" class="btn btn-outline-success" disabled>
+                                            <i class="bi bi-play-fill me-1"></i>Play Voice
+                                        </button>
+                                        <button id="downloadBtn" class="btn btn-outline-info" disabled>
+                                            <i class="bi bi-download me-1"></i>Download
+                                        </button>
+                                        <button id="resetBtn" class="btn btn-outline-secondary">
+                                            <i class="bi bi-arrow-clockwise me-1"></i>Reset
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Uploaded Audio Visualization -->
+                <div class="row mb-4" data-aos="fade-up" data-aos-delay="150">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">Voice Waveform Analysis</h5>
+                                <div class="chart-container">
+                                    <div id="uploadedWaveform"></div>
+                                </div>
+                                <div class="audio-controls">
+                                    <audio id="uploadedAudio" class="audio-player" controls style="display: none;"></audio>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Analysis Results -->
+                <div class="row mb-4" data-aos="fade-up" data-aos-delay="200">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">Voice Analysis Results</h5>
+                                <div id="analysisResult" class="text-center py-3">
+                                    <p class="text-muted">Upload a human voice file and click "Analyze Voice" to see results</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stats Dashboard -->
+                <div class="row mb-4" data-aos="fade-up" data-aos-delay="250">
+                    <div class="col-12">
+                        <div class="row">
+                            <div class="col-md-4 col-6 mb-3">
+                                <div class="stat-card card text-center">
+                                    <div class="card-body">
+                                        <h6 class="card-title">Analysis Sampling</h6>
+                                        <div class="stat-value text-primary" id="analysisSampling">-- Hz</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4 col-6 mb-3">
+                                <div class="stat-card card text-center">
+                                    <div class="card-body">
+                                        <h6 class="card-title">Nyquist Frequency</h6>
+                                        <div class="stat-value text-info" id="nyquistFrequency">-- Hz</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4 col-6 mb-3">
+                                <div class="stat-card card text-center">
+                                    <div class="card-body">
+                                        <h6 class="card-title">Duration</h6>
+                                        <div class="stat-value text-warning" id="duration">-- s</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- REMOVED: Technical Details Section -->
+                
+            </div>
+
+            <!-- Loading Indicator -->
+            <div class="loading text-center py-4" id="loading" style="display: none;">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2 mb-0">Processing voice data...</p>
+            </div>
+        </section>
+    </main>
+
+    <footer id="footer" class="footer">
+        <div class="container footer-top">
+            <div class="row gy-4">
+                <div class="col-lg-4 col-md-6 footer-about">
+                    <a href="index.html" class="d-flex align-items-center">
+                        <img src="assets/img/logodsp2.png" alt="Logo" style="max-height: 40px;">
+                    </a>
+                    <div class="footer-contact pt-3">
+                        <p class="mt-3"><strong>Phone:</strong> <span>+1 5589 55488 55</span></p>
+                        <p><strong>Email:</strong> <span>info@example.com</span></p>
+                    </div>
+                </div>
+
+                <div class="col-lg-2 col-md-3 footer-links">
+                    <h4>Useful Links</h4>
+                    <ul>
+                        <li><i class="bi bi-chevron-right"></i> <a href="index.html">Home</a></li>
+                        <li><i class="bi bi-chevron-right"></i> <a href="index.html#about">About us</a></li>
+                        <li><i class="bi bi-chevron-right"></i> <a href="index.html#services">Services</a></li>
+                        <li><i class="bi bi-chevron-right"></i> <a href="#">Terms of service</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-lg-2 col-md-3 footer-links">
+                    <h4>Our Services</h4>
+                    <ul>
+                        <li><i class="bi bi-chevron-right"></i> <a href="Doppler-Analysis.html">Doppler Analysis</a></li>
+                        <li><i class="bi bi-chevron-right"></i> <a href="Voice-Analysis.html">Voice Aliasing</a></li>
+                        <li><i class="bi bi-chevron-right"></i> <a href="#">Audio Processing</a></li>
+                        <li><i class="bi bi-chevron-right"></i> <a href="#">Signal Analysis</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-lg-4 col-md-12">
+                    <h4>Follow Us</h4>
+                    <p>Advanced signal processing solutions for real-world applications</p>
+                    <div class="social-links d-flex">
+                        <a href=""><i class="bi bi-twitter-x"></i></a>
+                        <a href=""><i class="bi bi-facebook"></i></a>
+                        <a href=""><i class="bi bi-instagram"></i></a>
+                        <a href=""><i class="bi bi-linkedin"></i></a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="container copyright text-center mt-4">
+            <p>© <span>Copyright</span> <strong class="px-1">SignalAnalyzer</strong> <span>All Rights Reserved</span></p>
+        </div>
+    </footer>
+
+    <!-- Vendor JS Files -->
+    <script src="assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/vendor/php-email-form/validate.js"></script>
+    <script src="assets/vendor/aos/aos.js"></script>
+    <script src="assets/vendor/glightbox/js/glightbox.min.js"></script>
+    <script src="assets/vendor/purecounter/purecounter_vanilla.js"></script>
+    <script src="assets/vendor/imagesloaded/imagesloaded.pkgd.min.js"></script>
+    <script src="assets/vendor/isotope-layout/isotope.pkgd.min.js"></script>
+    <script src="assets/vendor/swiper/swiper-bundle.min.js"></script>
+
+    <!-- Voice Analyzer JS -->
+    <script src="assets/js/voice-analyzer.js"></script>
+
+    <script>
+        // Initialize AOS animations
+        document.addEventListener('DOMContentLoaded', function() {
+            if (typeof AOS !== 'undefined') {
+                AOS.init({
+                    duration: 800,
+                    easing: 'ease-in-out',
+                    once: true
+                });
+            }
+        });
+    </script>
+</body>
+</html>
