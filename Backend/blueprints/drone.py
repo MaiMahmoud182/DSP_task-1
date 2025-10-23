@@ -1,239 +1,389 @@
 from flask import Blueprint, request, jsonify
+import numpy as np
+import librosa
+import soundfile as sf
+from transformers import AutoFeatureExtractor, AutoModelForAudioClassification
+import torch
+import os
+import io
+import base64
+import tempfile
+from scipy import signal
 import logging
-from datetime import datetime
-import random
+import traceback
 
-# Create blueprint
-drone_bp = Blueprint('drone', __name__, url_prefix='/api/drone')
-
-# Drone detection configuration
-DRONE_CLASSES = [
-    'Aircraft', 'Helicopter', 'Fixed-wing aircraft, airplane',
-    'Propeller, airscrew', 'Motor vehicle (road)'
-]
-
-BIRD_CLASSES = [
-    'Bird', 'Bird vocalization, bird call, bird song',
-    'Chirp, tweet', 'Caw', 'Crow', 'Pigeon, dove'
-]
-
-NOISE_CLASSES = [
-    'Wind noise (microphone)', 'Static', 'White noise',
-    'Pink noise', 'Hum', 'Environmental noise'
-]
-
-OTHER_CLASSES = [
-    'Speech', 'Music', 'Vehicle', 'Engine', 'Tools', 'Drill',
-    'Buzz', 'Rain', 'Water', 'Wind', 'Footsteps', 'Silence',
-    'Conversation', 'Laughter', 'Clapping'
-]
-
-ALL_CLASSES = DRONE_CLASSES + BIRD_CLASSES + NOISE_CLASSES + OTHER_CLASSES
-
-# Configure logger
+# Configure logging
 logger = logging.getLogger(__name__)
 
-def init_drone_blueprint(app):
-    """Initialize Drone blueprint"""
-    return drone_bp
+# Create blueprint
+drone_bp = Blueprint('drone', __name__)
 
-def allowed_file_audio(filename):
-    if '.' not in filename:
-        return False
-    ext = filename.rsplit('.', 1)[1].lower()
-    return ext in {'mp3', 'wav', 'ogg', 'm4a', 'flac'}
+# Configuration
+ALLOWED_EXTENSIONS = {'wav', 'mp3', 'flac', 'ogg'}
 
-def simulate_yamnet_analysis(filename, file_size):
-    """Simulate YAMNet analysis with proper confidence score distribution"""
+class DroneDetector:
+    def __init__(self):
+        self.model_name = "preszzz/drone-audio-detection-05-17-trial-0"
+        self.feature_extractor = None
+        self.model = None
+        self.load_model()
     
-    # Create consistent results based on filename
-    file_hash = sum(ord(c) for c in filename) % 100
-    random.seed(file_hash)
+    def load_model(self):
+        """Load drone detection model"""
+        try:
+            logger.info("Loading drone detection model...")
+            self.feature_extractor = AutoFeatureExtractor.from_pretrained(self.model_name)
+            self.model = AutoModelForAudioClassification.from_pretrained(self.model_name)
+            logger.info("Drone detection model loaded successfully!")
+        except Exception as e:
+            logger.error(f"Error loading model: {str(e)}")
+            raise
     
-    # Determine pattern type based on filename
-    filename_lower = filename.lower()
-    if "drone" in filename_lower or "helicopter" in filename_lower or "aircraft" in filename_lower:
-        pattern = 'drone'
-    elif "bird" in filename_lower or "chirp" in filename_lower or "crow" in filename_lower:
-        pattern = 'bird'
-    elif "noise" in filename_lower or "static" in filename_lower or "wind" in filename_lower:
-        pattern = 'noise'
-    else:
-        # Random distribution
-        if file_hash < 30:
-            pattern = 'drone'
-        elif file_hash < 60:
-            pattern = 'bird'
-        else:
-            pattern = 'noise'
-    
-    # Generate top 10 class predictions with proper probability distribution
-    base_scores = []
-    remaining_prob = 0.9
-    
-    for i in range(10):
-        if i == 9:
-            # Last score gets whatever remains
-            score = remaining_prob
-        else:
-            # Generate decreasing scores (typical for classification models)
-            max_score = remaining_prob * 0.8  # Leave some for remaining classes
-            score = random.uniform(0.05, max_score)
-            remaining_prob -= score
-        base_scores.append(score)
-    
-    # Shuffle and sort to get typical distribution (highest first)
-    random.shuffle(base_scores)
-    base_scores.sort(reverse=True)
-    
-    # Now assign these scores to classes based on pattern
-    top_classes = []
-    drone_score = 0.0
-    bird_score = 0.0
-    noise_score = 0.0
-    
-    # Available classes for each pattern (we'll pick from these)
-    if pattern == 'drone':
-        primary_classes = DRONE_CLASSES
-        secondary_classes = NOISE_CLASSES + OTHER_CLASSES
-        tertiary_classes = BIRD_CLASSES
-    elif pattern == 'bird':
-        primary_classes = BIRD_CLASSES
-        secondary_classes = NOISE_CLASSES + OTHER_CLASSES
-        tertiary_classes = DRONE_CLASSES
-    else:  # noise
-        primary_classes = NOISE_CLASSES
-        secondary_classes = OTHER_CLASSES
-        tertiary_classes = DRONE_CLASSES + BIRD_CLASSES
-    
-    # Assign scores to classes
-    for i, score in enumerate(base_scores):
-        if i < 3:  # Top 3 scores go to primary classes
-            class_name = random.choice(primary_classes)
-        elif i < 7:  # Next 4 scores go to secondary classes
-            class_name = random.choice(secondary_classes)
-        else:  # Last 3 scores go to tertiary classes
-            class_name = random.choice(tertiary_classes)
-        
-        # Add some small random variation
-        final_score = score * random.uniform(0.9, 1.1)
-        final_score = max(0.01, min(0.5, final_score))  # Keep in reasonable range
-        
-        top_classes.append((class_name, final_score))
-        
-        # Sum scores for categories (EXACTLY like your Python code)
-        if any(drone_class.lower() in class_name.lower() for drone_class in DRONE_CLASSES):
-            drone_score += final_score
-        elif any(bird_class.lower() in class_name.lower() for bird_class in BIRD_CLASSES):
-            bird_score += final_score
-        elif any(noise_class.lower() in class_name.lower() for noise_class in NOISE_CLASSES):
-            noise_score += final_score
-    
-    # Sort top classes by score (highest first)
-    top_classes.sort(key=lambda x: x[1], reverse=True)
-    
-    # Get top 5 for display
-    display_top_classes = top_classes[:5]
-    
-    # Final prediction (EXACTLY like your Python code)
-    max_score = max(drone_score, bird_score, noise_score)
-    
-    if max_score == drone_score and drone_score > 0.1:
-        prediction = "DRONE"
-    elif max_score == bird_score and bird_score > 0.1:
-        prediction = "BIRD"
-    else:
-        prediction = "NOISE"
-    
-    # Create confidences dict for all relevant classes
-    confidences = {}
-    for class_name in DRONE_CLASSES + BIRD_CLASSES + NOISE_CLASSES:
-        # Find if this class was in top predictions
-        found_score = 0.0
-        for cls, score in top_classes:
-            if cls == class_name:
-                found_score = score
-                break
-        confidences[class_name] = found_score
-    
-    # Debug output
-    total_top_score = sum(score for _, score in top_classes)
-    logger.info(f"File: {filename}")
-    logger.info(f"Pattern: {pattern}, Prediction: {prediction}")
-    logger.info(f"Total top 10 score: {total_top_score:.3f}")
-    logger.info(f"Category Scores - Drone: {drone_score:.3f}, Bird: {bird_score:.3f}, Noise: {noise_score:.3f}")
-    logger.info(f"Top 5 classes: {display_top_classes}")
-    
-    return {
-        'prediction': prediction,
-        'confidence_scores': {
-            'drone': round(drone_score, 4),
-            'bird': round(bird_score, 4),
-            'noise': round(noise_score, 4)
-        },
-        'confidences': {k: round(v, 4) for k, v in confidences.items()},
-        'top_classes': [(cls, round(score, 4)) for cls, score in display_top_classes]
-    }
-
-# ============== DRONE API ROUTES ==============
-
-@drone_bp.route('/health', methods=['GET'])
-def drone_health_check():
-    """Health check for Drone module"""
-    return jsonify({
-        'status': 'healthy',
-        'message': 'Drone Detection API is running!'
-    })
-
-@drone_bp.route('/detect', methods=['POST'])
-def detect_drone():
-    """Detect drone from audio"""
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file uploaded'}), 400
-    
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No file selected'}), 400
-    
-    try:
-        if not allowed_file_audio(file.filename):
-            return jsonify({'error': 'Unsupported file format. Use MP3, WAV, or OGG'}), 400
-        
-        # Read file to get size
-        file_content = file.read()
-        file_size = len(file_content)
-        
-        # Generate detection results matching your Python logic
-        results = simulate_yamnet_analysis(file.filename, file_size)
-        
-        return jsonify({
-            'success': True,
-            'prediction': results['prediction'],
-            'confidence_scores': results['confidence_scores'],
-            'confidences': results['confidences'],
-            'top_classes': results['top_classes'],
-            'audio_info': {
-                'file_type': file.filename.split('.')[-1].upper(),
-                'file_size': f"{file_size} bytes", 
-                'analysis_time': datetime.now().strftime("%H:%M:%S")
+    def detect_drone(self, audio_path):
+        """Drone detection using model inference"""
+        try:
+            # Load audio
+            audio_array, sampling_rate = librosa.load(audio_path, sr=16000)
+            
+            # Model inference
+            inputs = self.feature_extractor(
+                audio_array, 
+                sampling_rate=sampling_rate, 
+                return_tensors="pt",
+                padding=True
+            )
+            
+            # Prediction
+            with torch.no_grad():
+                outputs = self.model(**inputs)
+                predictions = torch.nn.functional.softmax(outputs.logits, dim=-1)
+            
+            # Process results
+            id2label = self.model.config.id2label
+            results = []
+            
+            for i in range(predictions.shape[1]):
+                score = predictions[0][i].item()
+                label = id2label[i]
+                results.append({
+                    'label': str(label),
+                    'score': float(score),
+                    'confidence_percentage': float(round(score * 100, 2))
+                })
+            
+            # Sort by confidence
+            results.sort(key=lambda x: x['score'], reverse=True)
+            top_prediction = results[0] if results else None
+            is_drone = bool(top_prediction['label'] == 'drone') if top_prediction else False
+            
+            return {
+                'success': True,
+                'is_drone': is_drone,
+                'predictions': results,
+                'top_prediction': top_prediction
             }
-        })
+            
+        except Exception as e:
+            logger.error(f"Drone detection error: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+# Global detector instance
+drone_detector = DroneDetector()
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def resample_audio_for_analysis(audio_data, original_sr, target_sr):
+    """
+    Resample audio for analysis with aliasing effects
+    """
+    try:
+        logger.info(f"Resampling for analysis: {original_sr}Hz -> {target_sr}Hz")
+        
+        if target_sr != original_sr:
+            duration = len(audio_data) / original_sr
+            new_length = int(duration * target_sr)
+            audio_resampled = signal.resample(audio_data, new_length)
+        else:
+            audio_resampled = audio_data.copy()
+        
+        return audio_resampled, target_sr
         
     except Exception as e:
-        logger.error(f"Drone detection error: {str(e)}")
-        return jsonify({'error': f'Failed to process audio: {str(e)}'}), 500
+        logger.error(f"Resampling error: {str(e)}")
+        raise
 
-@drone_bp.route('/analyze', methods=['POST'])
-def analyze_audio():
-    """Analyze audio file for drone detection"""
-    return detect_drone()  # Alias for detect endpoint
+def create_playback_audio(audio_data, sample_rate, mode='playback'):
+    """
+    Create audio for playback (browser-compatible) or download (exact sampling rate)
+    """
+    try:
+        # Normalize audio
+        audio_normalized = np.clip(audio_data, -1.0, 1.0)
+        
+        # Handle browser compatibility for playback
+        if mode == 'playback':
+            playback_sampling_rate = max(8000, int(sample_rate))
+            
+            if playback_sampling_rate > sample_rate:
+                # Upsample for browser compatibility while preserving aliasing
+                upsampling_factor = playback_sampling_rate / sample_rate
+                upsampled_length = int(len(audio_normalized) * upsampling_factor)
+                audio_playback = signal.resample(audio_normalized, upsampled_length)
+                was_upsampled = True
+            else:
+                audio_playback = audio_normalized.copy()
+                was_upsampled = False
+        else:
+            # Download mode: use exact sampling rate
+            audio_playback = audio_normalized.copy()
+            playback_sampling_rate = sample_rate
+            was_upsampled = False
+        
+        # Prevent clipping
+        peak = np.max(np.abs(audio_playback))
+        if peak > 0.9:
+            audio_playback = audio_playback * 0.9 / peak
+        
+        # Convert to 16-bit PCM
+        audio_int16 = (audio_playback * 32767).astype(np.int16)
+        
+        # Create WAV file
+        audio_buffer = io.BytesIO()
+        sf.write(
+            audio_buffer,
+            audio_int16,
+            int(playback_sampling_rate),
+            format='WAV',
+            subtype='PCM_16'
+        )
+        audio_buffer.seek(0)
+        
+        # Base64 encoding
+        wav_data = audio_buffer.getvalue()
+        audio_base64 = base64.b64encode(wav_data).decode('utf-8')
+        
+        return {
+            'audio_data': f'data:audio/wav;base64,{audio_base64}',
+            'playback_sampling_rate': playback_sampling_rate,
+            'was_upsampled': was_upsampled
+        }
+        
+    except Exception as e:
+        logger.error(f"Audio creation error: {str(e)}")
+        raise
 
-@drone_bp.route('/classes', methods=['GET'])
-def get_detection_classes():
-    """Get available detection classes"""
+def generate_waveform_data(audio_data, sample_rate, max_points=800):
+    """
+    Generate waveform data for visualization
+    """
+    try:
+        # Downsample for efficient visualization
+        downsample_factor = max(1, len(audio_data) // max_points)
+        
+        time_seconds = np.arange(len(audio_data)) / sample_rate
+        time_display = time_seconds[::downsample_factor].tolist()
+        amplitude_display = audio_data[::downsample_factor].tolist()
+        
+        # Aliasing detection for visualization
+        nyquist_frequency = sample_rate / 2
+        has_aliasing = sample_rate < 8000  # Simple rule for drone audio
+        
+        return {
+            'time': time_display,
+            'amplitude': amplitude_display,
+            'sample_rate': int(sample_rate),
+            'nyquist_frequency': float(nyquist_frequency),
+            'is_aliasing': has_aliasing,
+            'duration': float(len(audio_data) / sample_rate)
+        }
+        
+    except Exception as e:
+        logger.error(f"Waveform generation error: {str(e)}")
+        return {'time': [], 'amplitude': []}
+
+@drone_bp.route('/api/drone/detect', methods=['POST'])
+def detect_drone():
+    """Drone detection endpoint"""
+    temporary_file_path = None
+    try:
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+        
+        if file and allowed_file(file.filename):
+            # Create temporary file
+            file_descriptor, temporary_file_path = tempfile.mkstemp(suffix='.wav')
+            os.close(file_descriptor)
+            file.save(temporary_file_path)
+            
+            try:
+                # Drone detection
+                result = drone_detector.detect_drone(temporary_file_path)
+                return jsonify(result)
+                
+            finally:
+                # Clean up
+                if temporary_file_path and os.path.exists(temporary_file_path):
+                    os.unlink(temporary_file_path)
+        
+        else:
+            return jsonify({
+                'success': False, 
+                'error': f'Invalid file type. Allowed types: {", ".join(ALLOWED_EXTENSIONS)}'
+            }), 400
+            
+    except Exception as e:
+        logger.error(f"Detection endpoint error: {str(e)}")
+        if temporary_file_path and os.path.exists(temporary_file_path):
+            try:
+                os.unlink(temporary_file_path)
+            except:
+                pass
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@drone_bp.route('/api/drone/resample-audio', methods=['POST'])
+def resample_audio():
+    """Audio resampling with aliasing effects and web compatibility"""
+    temporary_file_path = None
+    try:
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No audio file provided'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+        
+        # Get target sampling rate
+        target_sampling_rate = request.form.get('target_sampling_rate')
+        if not target_sampling_rate:
+            return jsonify({'success': False, 'error': 'No sampling rate provided'}), 400
+        
+        target_sampling_rate = int(target_sampling_rate)
+        if target_sampling_rate < 100 or target_sampling_rate > 48000:
+            return jsonify({'success': False, 'error': 'Sampling rate must be between 100 and 48000 Hz'}), 400
+        
+        # Get mode (playback or download)
+        mode = request.form.get('mode', 'playback')
+        
+        if file and allowed_file(file.filename):
+            # Create temporary file
+            file_descriptor, temporary_file_path = tempfile.mkstemp(suffix='.wav')
+            os.close(file_descriptor)
+            file.save(temporary_file_path)
+            
+            # Load original audio
+            original_audio, original_sr = librosa.load(temporary_file_path, sr=None)
+            
+            # Resample for analysis (creates actual aliasing)
+            resampled_audio, final_sr = resample_audio_for_analysis(original_audio, original_sr, target_sampling_rate)
+            
+            # Create playback/download audio
+            audio_result = create_playback_audio(resampled_audio, final_sr, mode)
+            
+            # Generate waveform data
+            original_waveform = generate_waveform_data(original_audio, original_sr)
+            resampled_waveform = generate_waveform_data(resampled_audio, final_sr)
+            
+            # Clean up
+            if temporary_file_path and os.path.exists(temporary_file_path):
+                os.unlink(temporary_file_path)
+            
+            # Response data
+            response_data = {
+                'success': True,
+                'audio_data': audio_result['audio_data'],
+                'waveform_data': resampled_waveform,
+                'sampling_info': {
+                    'original_sample_rate': int(original_sr),
+                    'analysis_sample_rate': int(final_sr),
+                    'playback_sample_rate': int(audio_result['playback_sampling_rate']),
+                    'nyquist_frequency': resampled_waveform['nyquist_frequency'],
+                    'was_resampled': bool(target_sampling_rate != original_sr),
+                    'was_upsampled': audio_result['was_upsampled'],
+                    'has_aliasing': resampled_waveform['is_aliasing'],
+                    'mode': mode
+                }
+            }
+            
+            return jsonify(response_data)
+        else:
+            return jsonify({
+                'success': False, 
+                'error': f'Invalid file type. Allowed types: {", ".join(ALLOWED_EXTENSIONS)}'
+            }), 400
+            
+    except Exception as e:
+        logger.error(f"Resampling endpoint error: {str(e)}")
+        if temporary_file_path and os.path.exists(temporary_file_path):
+            try:
+                os.unlink(temporary_file_path)
+            except:
+                pass
+        return jsonify({'success': False, 'error': f'Processing failed: {str(e)}'}), 500
+
+@drone_bp.route('/api/drone/get-waveform', methods=['POST'])
+def get_waveform():
+    """Get waveform data from audio"""
+    temporary_file_path = None
+    try:
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No audio file provided'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+        
+        if file and allowed_file(file.filename):
+            # Create temporary file
+            file_descriptor, temporary_file_path = tempfile.mkstemp(suffix='.wav')
+            os.close(file_descriptor)
+            file.save(temporary_file_path)
+            
+            # Load audio
+            audio_data, sample_rate = librosa.load(temporary_file_path, sr=None)
+            
+            # Generate waveform
+            waveform_data = generate_waveform_data(audio_data, sample_rate)
+            
+            # Clean up
+            if temporary_file_path and os.path.exists(temporary_file_path):
+                os.unlink(temporary_file_path)
+            
+            return jsonify({
+                'success': True,
+                'waveform': waveform_data
+            })
+        else:
+            return jsonify({
+                'success': False, 
+                'error': f'Invalid file type. Allowed types: {", ".join(ALLOWED_EXTENSIONS)}'
+            }), 400
+            
+    except Exception as e:
+        logger.error(f"Waveform endpoint error: {str(e)}")
+        if temporary_file_path and os.path.exists(temporary_file_path):
+            try:
+                os.unlink(temporary_file_path)
+            except:
+                pass
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@drone_bp.route('/api/drone/health', methods=['GET'])
+def health_check():
+    """Health check"""
     return jsonify({
-        'drone_classes': DRONE_CLASSES,
-        'bird_classes': BIRD_CLASSES,
-        'noise_classes': NOISE_CLASSES,
-        'other_classes': OTHER_CLASSES
+        'status': 'healthy',
+        'model_loaded': bool(drone_detector.model is not None),
+        'endpoints': {
+            'detect': 'POST /api/drone/detect',
+            'resample_audio': 'POST /api/drone/resample-audio',
+            'get_waveform': 'POST /api/drone/get-waveform'
+        }
     })

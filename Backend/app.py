@@ -35,8 +35,6 @@ from blueprints.drone import drone_bp
 from blueprints.sar import sar_bp
 from blueprints.voice_aliasing import voice_bp
 
-
-
 # Load ECG model once at startup
 logger.info("🧠 Loading ECG model...")
 ecg_model = load_ecg_model()
@@ -56,7 +54,7 @@ init_ecg_blueprint(app)
 app.register_blueprint(doppler_bp)
 app.register_blueprint(ecg_bp)
 app.register_blueprint(eeg_bp)
-app.register_blueprint(drone_bp)
+app.register_blueprint(drone_bp)  # ✅ Drone blueprint registered
 app.register_blueprint(sar_bp)
 app.register_blueprint(voice_bp)
 
@@ -93,7 +91,12 @@ def health_check():
             'ecg': ['/api/ecg/upload', '/api/ecg/classify'],
             'eeg': ['/api/eeg/upload', '/api/eeg/classify'],
             'doppler': ['/api/generate-doppler-sound', '/api/analyze-vehicle-sound','/api/get-spectrogram','/api/get-resampled-audio'],
-            'drone': ['/api/drone/upload-audio', '/api/drone/classify'],
+            'drone': [
+                '/api/drone/detect',                    
+                '/api/drone/resample-audio',           
+                '/api/drone/get-waveform',             
+                '/api/drone/health'                    
+            ],
             'sar': ['/api/sar/analyze'],
             'voice': ['/api/analyze-voice', '/api/get-resampled-voice'] 
         }

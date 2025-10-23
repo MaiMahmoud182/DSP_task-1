@@ -1,569 +1,545 @@
-// DOM Elements
-const fileInput = document.getElementById('fileInput');
-const analyzeBtn = document.getElementById('analyzeBtn');
-const playAudioBtn = document.getElementById('playAudioBtn');
-const advancedAnalysisBtn = document.getElementById('advancedAnalysisBtn');
-const resetBtn = document.getElementById('resetBtn');
-const exportResultsBtn = document.getElementById('exportResultsBtn');
-const loading = document.getElementById('loading');
-const resultsSection = document.getElementById('resultsSection');
-const audioPlayer = document.getElementById('audioPlayer');
-
-// Audio info elements
-const fileName = document.getElementById('fileName');
-const fileSize = document.getElementById('fileSize');
-const fileDuration = document.getElementById('fileDuration');
-const fileFormat = document.getElementById('fileFormat');
-
-// File input display
-const fileDisplay = document.getElementById('fileDisplay');
-
-// Update file display when file is selected
-fileInput.addEventListener('change', function() {
-    if (this.files.length > 0) {
-        const file = this.files[0];
-        fileDisplay.innerHTML = `<i class="bi bi-file-earmark-music me-2"></i><span>${file.name}</span>`;
+// assets/js/drone-detector.js - Drone Detection Analyzer
+class DroneDetectionAnalyzer {
+    constructor() {
+        this.currentAudioFile = null;
+        this.uploadedAudioUrl = null;
+        this.resampledAudioData = null;
+        this.analysisResults = null;
+        this.apiBaseUrl = 'http://localhost:5000';
+        this.initializeEventHandlers();
+        this.initializeControlElements();
         
-        // Update audio info
-        fileName.textContent = file.name;
-        fileSize.textContent = formatFileSize(file.size);
-        fileFormat.textContent = file.type || 'Unknown';
-        fileDuration.textContent = 'Calculating...';
-        
-        // Enable play button if it's an audio file
-        playAudioBtn.disabled = !file.type.startsWith('audio/');
-        
-        // Create object URL for audio playback
-        if (file.type.startsWith('audio/')) {
-            const objectUrl = URL.createObjectURL(file);
-            audioPlayer.src = objectUrl;
-            
-            // Try to get duration
-            audioPlayer.addEventListener('loadedmetadata', function() {
-                if (audioPlayer.duration && isFinite(audioPlayer.duration)) {
-                    fileDuration.textContent = formatDuration(audioPlayer.duration);
-                } else {
-                    fileDuration.textContent = 'Unknown';
-                }
-            });
-            
-            // If metadata already loaded
-            if (audioPlayer.duration && isFinite(audioPlayer.duration)) {
-                fileDuration.textContent = formatDuration(audioPlayer.duration);
+        // Test connection on startup
+        setTimeout(() => {
+            this.testBackendConnection();
+        }, 1000);
+    }
+
+    initializeEventHandlers() {
+        // Audio analysis controls
+        document.getElementById('audioFile').addEventListener('change', (event) => this.handleAudioFileUpload(event));
+        document.getElementById('analyzeBtn').addEventListener('click', () => this.analyzeDroneAudio());
+        document.getElementById('playUploadedBtn').addEventListener('click', () => this.playUploadedAudio());
+        document.getElementById('downloadBtn').addEventListener('click', () => this.downloadResampledAudio());
+        document.getElementById('resetBtn').addEventListener('click', () => this.resetAnalysisSession());
+
+        // Sampling rate control
+        document.getElementById('analysisSamplingRate').addEventListener('input', (event) => this.updateAnalysisSamplingRateDisplay(event));
+    }
+
+    initializeControlElements() {
+        this.updateAnalysisSamplingRateDisplay({ target: document.getElementById('analysisSamplingRate') });
+    }
+
+    async testBackendConnection() {
+        try {
+            console.log('Testing backend connection...');
+            const response = await fetch(`${this.apiBaseUrl}/api/health`);
+            if (response.ok) {
+                const health = await response.json();
+                console.log('Backend health:', health);
+                this.showUserNotification('✅ Backend connected successfully', 'success');
+                return true;
+            } else {
+                this.showUserNotification('❌ Backend is not responding properly', 'error');
+                return false;
             }
+        } catch (error) {
+            console.error('Backend connection test failed:', error);
+            this.showUserNotification('❌ Cannot connect to backend server. Make sure it\'s running on http://localhost:5000', 'error');
+            return false;
         }
-    } else {
-        fileDisplay.innerHTML = `<i class="bi bi-cloud-upload me-2"></i><span>Choose File</span>`;
-        resetAudioInfo();
-    }
-});
-
-// Play audio button
-playAudioBtn.addEventListener('click', function() {
-    if (audioPlayer.src && audioPlayer.src.startsWith('blob:')) {
-        audioPlayer.play().catch(e => {
-            console.error('Error playing audio:', e);
-            alert('Error playing audio file');
-        });
-    }
-});
-
-// Reset button
-resetBtn.addEventListener('click', function() {
-    fileInput.value = '';
-    fileDisplay.innerHTML = `<i class="bi bi-cloud-upload me-2"></i><span>Choose File</span>`;
-    resultsSection.style.display = 'none';
-    resetAudioInfo();
-    playAudioBtn.disabled = true;
-    advancedAnalysisBtn.disabled = true;
-    if (audioPlayer.src) {
-        URL.revokeObjectURL(audioPlayer.src);
-        audioPlayer.src = '';
-    }
-});
-
-// Analyze button click - UPDATED FOR BLUEPRINT STRUCTURE
-analyzeBtn.addEventListener('click', async function() {
-    if (!fileInput.files.length) {
-        alert('Please select an audio file first');
-        return;
     }
 
-    const file = fileInput.files[0];
-    const formData = new FormData();
-    formData.append('file', file);
-
-    // Show loading
-    loading.style.display = 'block';
-    resultsSection.style.display = 'none';
-    analyzeBtn.disabled = true;
-    
-    console.log('Sending file to server:', file.name, 'Size:', file.size, 'Type:', file.type);
-    
-    try {
-        // Send to Flask backend with timeout
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
+    updateAnalysisSamplingRateDisplay(event) {
+        const samplingRate = parseInt(event.target.value);
+        document.getElementById('analysisSamplingRateValue').textContent = `${samplingRate} Hz`;
         
-        // UPDATED: Use the new blueprint endpoint
-        const response = await fetch('http://127.0.0.1:5000/api/drone/detect', {
-            method: 'POST',
-            body: formData,
-            signal: controller.signal
-        });
+        const nyquistStatus = document.getElementById('analysisNyquistStatus');
+        const nyquistFrequency = samplingRate / 2;
         
-        clearTimeout(timeoutId);
+        // Drone audio typically has frequencies up to 2000 Hz
+        const droneMaxFreq = 2000;
         
-        console.log('Response status:', response.status, 'OK:', response.ok);
-        
-        if (!response.ok) {
-            let errorText = '';
-            try {
-                // Try JSON first
-                const errorData = await response.clone().json();
-                errorText = errorData.error || JSON.stringify(errorData);
-            } catch {
-                // Fallback to text if not JSON
-                errorText = await response.text();
-            }
-            throw new Error(errorText || `Server error: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        console.log('Response data:', data);
-        
-        loading.style.display = 'none';
-        analyzeBtn.disabled = false;
-        
-        if (data.error) {
-            alert('Error: ' + data.error);
-            return;
-        }
-
-        // Enable advanced analysis button
-        advancedAnalysisBtn.disabled = false;
-        
-        // Display results directly from YAMNet analysis
-        displayResults(data);
-        
-    } catch (error) {
-        console.error('Fetch error:', error);
-        loading.style.display = 'none';
-        analyzeBtn.disabled = false;
-        
-        if (error.name === 'AbortError') {
-            alert('Error: Request timed out. Please try again.');
+        if (samplingRate >= 2 * droneMaxFreq) {
+            nyquistStatus.textContent = `✅ Perfect: ${samplingRate}Hz ≥ 4kHz Nyquist`;
+            nyquistStatus.className = 'badge bg-success';
+        } else if (samplingRate >= 8000) {
+            nyquistStatus.textContent = `✅ Good: ${samplingRate}Hz sampling`;
+            nyquistStatus.className = 'badge bg-success';
+        } else if (samplingRate >= 4000) {
+            nyquistStatus.textContent = `⚠️ Fair: ${samplingRate}Hz sampling`;
+            nyquistStatus.className = 'badge bg-warning';
+        } else if (samplingRate >= 2000) {
+            nyquistStatus.textContent = `⚠️ Poor: ${samplingRate}Hz (drone frequencies may alias)`;
+            nyquistStatus.className = 'badge bg-warning';
+        } else if (samplingRate >= 1000) {
+            nyquistStatus.textContent = `❌ High Aliasing Risk: ${samplingRate}Hz`;
+            nyquistStatus.className = 'badge bg-danger';
         } else {
-            alert('Error: ' + (error.message || 'Failed to process file'));
+            nyquistStatus.textContent = `❌ Extreme Aliasing: ${samplingRate}Hz`;
+            nyquistStatus.className = 'badge bg-danger';
         }
     }
-});
 
-// NEW: Function to get available detection classes
-async function loadDetectionClasses() {
-    try {
-        const response = await fetch('http://127.0.0.1:5000/api/drone/classes');
-        if (response.ok) {
-            const data = await response.json();
-            console.log('Available detection classes:', data);
-            return data;
-        }
-    } catch (error) {
-        console.error('Failed to load detection classes:', error);
-    }
-    return null;
-}
+    handleAudioFileUpload(event) {
+        const selectedFile = event.target.files[0];
+        if (selectedFile) {
+            const allowedAudioTypes = ['audio/wav', 'audio/mp3', 'audio/flac', 'audio/aac', 'audio/ogg', 'audio/x-wav'];
+            if (!allowedAudioTypes.includes(selectedFile.type) && !selectedFile.name.match(/\.(wav|mp3|flac|aac|ogg)$/i)) {
+                this.showUserNotification('❌ Please upload a valid audio file (WAV, MP3, FLAC, AAC, OGG)', 'error');
+                event.target.value = '';
+                return;
+            }
 
-// Display results function - Handles scores that can exceed 100%
-function displayResults(data) {
-    console.log('Displaying YAMNet results:', data);
-    
-    const { prediction, confidence_scores, top_classes, confidences, audio_info } = data;
-    const maxScore = Math.max(confidence_scores.drone, confidence_scores.bird, confidence_scores.noise);
-    
-    // Calculate percentage for display (cap at 100% for visualization)
-    const displayDrone = Math.min(100, (confidence_scores.drone * 100));
-    const displayBird = Math.min(100, (confidence_scores.bird * 100));
-    const displayNoise = Math.min(100, (confidence_scores.noise * 100));
-    const displayMax = Math.min(100, (maxScore * 100));
-    
-    // Show results section
-    resultsSection.style.display = 'block';
-    
-    // Create results HTML
-    let resultsHTML = `
-        <div class="row">
-            <div class="col-12">
-                <div class="results-header text-center mb-4">
-                    <h3>🎯 Drone Detection Analysis Results</h3>
-                    <p class="text-muted">Powered by YAMNet Audio Classification</p>
-                </div>
-            </div>
-        </div>
-        
-        <div class="row">
-            <!-- Main Result -->
-            <div class="col-md-6 mb-4">
-                <div class="card result-card ${prediction === 'DRONE' ? 'drone-detected' : prediction === 'BIRD' ? 'bird-detected' : 'noise-detected'}">
-                    <div class="card-body text-center">
-                        <div class="result-icon mb-3">
-                            ${prediction === 'DRONE' ? '🚁' : prediction === 'BIRD' ? '🐦' : '🔇'}
-                        </div>
-                        <h4 class="card-title">${prediction === 'DRONE' ? '🚁 DRONE DETECTED' : prediction === 'BIRD' ? '🐦 BIRD DETECTED' : '🔇 BACKGROUND NOISE'}</h4>
-                        <div class="confidence-display">
-                            <div class="confidence-value ${prediction === 'DRONE' ? 'text-success' : prediction === 'BIRD' ? 'text-warning' : 'text-secondary'}">
-                                ${(maxScore * 100).toFixed(1)}%
-                            </div>
-                            <div class="confidence-label">Category Confidence</div>
-                        </div>
-                        ${prediction === 'DRONE' ? 
-                            '<div class="alert alert-success mt-3 mb-0"><strong>Drone activity detected!</strong> Aircraft-related sounds identified in the audio.</div>' : 
-                            prediction === 'BIRD' ?
-                            '<div class="alert alert-warning mt-3 mb-0"><strong>Bird sounds detected.</strong> Bird-related vocalizations identified.</div>' :
-                            '<div class="alert alert-secondary mt-3 mb-0"><strong>Background noise detected.</strong> No significant drone or bird patterns found.</div>'
-                        }
-                    </div>
-                </div>
-            </div>
+            if (selectedFile.size > 50 * 1024 * 1024) {
+                this.showUserNotification('❌ File too large. Please upload files smaller than 50MB', 'error');
+                event.target.value = '';
+                return;
+            }
+
+            this.currentAudioFile = selectedFile;
+            document.getElementById('analyzeBtn').disabled = false;
+            document.getElementById('playUploadedBtn').disabled = false;
             
-            <!-- Confidence Scores -->
-            <div class="col-md-6 mb-4">
-                <div class="card info-card">
-                    <div class="card-body">
-                        <h5 class="card-title">Detection Confidence Scores</h5>
-                        <div class="score-explanation mb-3">
-                            <small class="text-muted">
-                                Scores represent confidence levels for each category
-                            </small>
-                        </div>
-                        <div class="confidence-bars">
-                            <div class="confidence-bar-item ${prediction === 'DRONE' ? 'active-category' : ''}">
-                                <div class="bar-label">
-                                    <i class="bi bi-airplane me-1"></i>Drone
-                                </div>
-                                <div class="progress">
-                                    <div class="progress-bar bg-success" style="width: ${displayDrone}%"></div>
-                                </div>
-                                <div class="bar-value">${(confidence_scores.drone * 100).toFixed(1)}%</div>
-                            </div>
-                            <div class="confidence-bar-item ${prediction === 'BIRD' ? 'active-category' : ''}">
-                                <div class="bar-label">
-                                    <i class="bi bi-bird me-1"></i>Bird
-                                </div>
-                                <div class="progress">
-                                    <div class="progress-bar bg-warning" style="width: ${displayBird}%"></div>
-                                </div>
-                                <div class="bar-value">${(confidence_scores.bird * 100).toFixed(1)}%</div>
-                            </div>
-                            <div class="confidence-bar-item ${prediction === 'NOISE' ? 'active-category' : ''}">
-                                <div class="bar-label">
-                                    <i class="bi bi-volume-mute me-1"></i>Noise
-                                </div>
-                                <div class="progress">
-                                    <div class="progress-bar bg-secondary" style="width: ${displayNoise}%"></div>
-                                </div>
-                                <div class="bar-value">${(confidence_scores.noise * 100).toFixed(1)}%</div>
-                            </div>
-                        </div>
-                        <div class="mt-3">
-                            <small class="text-muted">Detection threshold: > 10% category confidence</small>
-                        </div>
-                    </div>
-                </div>
+            this.displayUploadedFileInformation(selectedFile);
+            
+            this.showUserNotification('✅ Drone audio file uploaded successfully!', 'success');
+        }
+    }
+
+    displayUploadedFileInformation(file) {
+        document.getElementById('uploadedWaveform').innerHTML = `
+            <div class="uploaded-file-info text-center p-3">
+                <i class="bi bi-file-earmark-music text-primary fs-1 mb-2"></i>
+                <h6 class="mb-1">${file.name}</h6>
+                <p class="mb-1 text-muted small">${this.formatFileSize(file.size)} • Ready for analysis</p>
             </div>
-        </div>
-    `;
-    
-    // Individual Class Confidences
-    if (confidences && Object.keys(confidences).length > 0) {
-        resultsHTML += `
-            <div class="row mt-4">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-body">
-                            <h5 class="card-title">Detailed Class Analysis</h5>
-                            <div class="class-confidences">
         `;
+    }
+
+    async analyzeDroneAudio() {
+        if (!this.currentAudioFile) return;
+
+        this.showProcessingIndicator(true);
+        this.setAnalysisControlsState(true);
+
+        const formData = new FormData();
+        formData.append('file', this.currentAudioFile);
         
-        // Group classes by category
-        const droneClasses = [];
-        const birdClasses = [];
-        const noiseClasses = [];
-        const otherClasses = [];
-        
-        Object.entries(confidences).forEach(([className, confidence]) => {
-            if (confidence > 0) {
-                const category = getCategoryForClass(className);
-                const item = { className, confidence, confidencePercent: (confidence * 100).toFixed(1) };
+        const analysisSamplingRate = document.getElementById('analysisSamplingRate').value;
+        formData.append('target_sampling_rate', analysisSamplingRate);
+
+        try {
+            console.log('Sending drone analysis request...');
+            
+            const apiResponse = await fetch(`${this.apiBaseUrl}/api/drone/resample-audio`, {
+                method: 'POST',
+                body: formData
+            });
+
+            console.log('Response status:', apiResponse.status);
+
+            if (!apiResponse.ok) {
+                throw new Error(`Server error: ${apiResponse.status}`);
+            }
+
+            const responseData = await apiResponse.json();
+
+            if (responseData.success) {
+                this.analysisResults = responseData;
                 
-                switch(category) {
-                    case 'drone':
-                        droneClasses.push(item);
-                        break;
-                    case 'bird':
-                        birdClasses.push(item);
-                        break;
-                    case 'noise':
-                        noiseClasses.push(item);
-                        break;
-                    default:
-                        otherClasses.push(item);
+                // Pre-load resampled audio for playback
+                this.resampledAudioData = responseData.audio_data;
+                
+                // Display waveform visualization
+                if (responseData.waveform_data) {
+                    this.displayAnalyzedWaveform(responseData.waveform_data, responseData.sampling_info);
                 }
+                
+                this.displayAnalysisResults(responseData.sampling_info);
+                
+                // Perform drone detection
+                await this.performDroneDetection();
+                
+                this.showUserNotification('✅ Drone analysis completed!', 'success');
+            } else {
+                this.showUserNotification('❌ Analysis failed: ' + (responseData.error || 'Unknown error'), 'error');
             }
-        });
-        
-        // Sort by confidence (descending)
-        const sortByConfidence = (a, b) => b.confidence - a.confidence;
-        droneClasses.sort(sortByConfidence);
-        birdClasses.sort(sortByConfidence);
-        noiseClasses.sort(sortByConfidence);
-        otherClasses.sort(sortByConfidence);
-        
-        // Display drone classes
-        if (droneClasses.length > 0) {
-            resultsHTML += `
-                <div class="category-section">
-                    <h6><i class="bi bi-airplane text-success me-2"></i>Drone-Related Classes</h6>
-            `;
-            droneClasses.forEach(item => {
-                resultsHTML += `
-                    <div class="class-confidence-item">
-                        <span class="class-name">${item.className}</span>
-                        <div class="class-confidence-bar">
-                            <div class="confidence-bar bg-success" style="width: ${item.confidencePercent}%"></div>
-                        </div>
-                        <span class="class-confidence-value">${item.confidencePercent}%</span>
-                    </div>
-                `;
-            });
-            resultsHTML += `</div>`;
+        } catch (error) {
+            console.error('Analysis error:', error);
+            
+            if (error.message.includes('Failed to fetch')) {
+                this.showUserNotification('❌ Cannot connect to server. Make sure backend is running on http://localhost:5000', 'error');
+            } else {
+                this.showUserNotification('❌ ' + error.message, 'error');
+            }
+        } finally {
+            this.showProcessingIndicator(false);
+            this.setAnalysisControlsState(false);
         }
-        
-        // Display bird classes
-        if (birdClasses.length > 0) {
-            resultsHTML += `
-                <div class="category-section">
-                    <h6><i class="bi bi-bird text-warning me-2"></i>Bird-Related Classes</h6>
-            `;
-            birdClasses.forEach(item => {
-                resultsHTML += `
-                    <div class="class-confidence-item">
-                        <span class="class-name">${item.className}</span>
-                        <div class="class-confidence-bar">
-                            <div class="confidence-bar bg-warning" style="width: ${item.confidencePercent}%"></div>
-                        </div>
-                        <span class="class-confidence-value">${item.confidencePercent}%</span>
-                    </div>
-                `;
+    }
+
+    async performDroneDetection() {
+        if (!this.currentAudioFile) return;
+
+        try {
+            const formData = new FormData();
+            formData.append('file', this.currentAudioFile);
+
+            const apiResponse = await fetch(`${this.apiBaseUrl}/api/drone/detect`, {
+                method: 'POST',
+                body: formData
             });
-            resultsHTML += `</div>`;
+
+            if (!apiResponse.ok) {
+                throw new Error(`Detection server error: ${apiResponse.status}`);
+            }
+
+            const responseData = await apiResponse.json();
+
+            if (responseData.success) {
+                this.displayDetectionResults(responseData);
+            } else {
+                this.showUserNotification('❌ Drone detection failed: ' + (responseData.error || 'Unknown error'), 'error');
+            }
+        } catch (error) {
+            console.error('Detection error:', error);
+            this.showUserNotification('❌ Drone detection error: ' + error.message, 'error');
         }
-        
-        // Display noise classes
-        if (noiseClasses.length > 0) {
-            resultsHTML += `
-                <div class="category-section">
-                    <h6><i class="bi bi-volume-mute text-secondary me-2"></i>Noise Classes</h6>
-            `;
-            noiseClasses.forEach(item => {
-                resultsHTML += `
-                    <div class="class-confidence-item">
-                        <span class="class-name">${item.className}</span>
-                        <div class="class-confidence-bar">
-                            <div class="confidence-bar bg-secondary" style="width: ${item.confidencePercent}%"></div>
-                        </div>
-                        <span class="class-confidence-value">${item.confidencePercent}%</span>
-                    </div>
-                `;
-            });
-            resultsHTML += `</div>`;
+    }
+
+    displayAnalyzedWaveform(waveformData, samplingInfo = null) {
+        try {
+            const hasAliasing = waveformData.is_aliasing;
+            const waveformColor = hasAliasing ? '#dc3545' : '#28a745';
+            const waveformName = hasAliasing ? 'Aliased Drone Audio' : 'Drone Audio';
+            
+            const waveformTrace = {
+                x: waveformData.time,
+                y: waveformData.amplitude,
+                type: 'scatter',
+                mode: 'lines',
+                line: { 
+                    color: waveformColor, 
+                    width: 1.5,
+                    shape: 'spline'
+                },
+                name: waveformName,
+                hovertemplate: 'Time: %{x:.2f}s<br>Amplitude: %{y:.3f}<extra></extra>'
+            };
+
+            let titleText = 'Drone Audio Waveform';
+            if (hasAliasing && samplingInfo) {
+                const nyquist = samplingInfo.nyquist_frequency;
+                titleText = `ALIASING DETECTED: Nyquist limit ${nyquist.toFixed(0)}Hz`;
+            }
+
+            const plotLayout = {
+                title: {
+                    text: titleText,
+                    font: { 
+                        size: 16, 
+                        color: hasAliasing ? '#dc3545' : '#333' 
+                    }
+                },
+                xaxis: { 
+                    title: 'Time (s)', 
+                    gridcolor: '#f0f0f0',
+                    showgrid: true,
+                    tickformat: '.1f'
+                },
+                yaxis: { 
+                    title: 'Amplitude', 
+                    gridcolor: '#f0f0f0',
+                    showgrid: true,
+                    range: [-1, 1]
+                },
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                margin: { t: 50, r: 30, b: 50, l: 60 },
+                showlegend: false
+            };
+
+            const plotConfig = {
+                responsive: true,
+                displayModeBar: true,
+                displaylogo: false
+            };
+
+            const container = document.getElementById('uploadedWaveform');
+            container.innerHTML = '';
+            Plotly.newPlot('uploadedWaveform', [waveformTrace], plotLayout, plotConfig);
+        } catch (error) {
+            console.error('Waveform display error:', error);
+            this.showUserNotification('❌ Error displaying waveform', 'error');
         }
-        
-        resultsHTML += `
+    }
+
+    displayAnalysisResults(samplingInfo) {
+        // Update stats
+        document.getElementById('analysisSampling').textContent = `${samplingInfo.analysis_sample_rate || 0} Hz`;
+        document.getElementById('nyquistFrequency').textContent = samplingInfo.nyquist_frequency ? 
+            `${samplingInfo.nyquist_frequency.toFixed(0)} Hz` : '-- Hz';
+        document.getElementById('duration').textContent = '-- s'; // You can calculate this from waveform data
+
+        const resultContainer = document.getElementById('analysisResult');
+        const isAliasingRisk = samplingInfo.has_aliasing;
+
+        resultContainer.innerHTML = `
+            <div class="classification-result ${isAliasingRisk ? 'sampling-warning' : 'sampling-safe'}">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h4>🚁 Drone Audio Analysis</h4>
+                        <div class="row mt-3">
+                            <div class="col-6">
+                                <p class="mb-2"><strong>Analysis Sampling Rate:</strong></p>
+                                <p class="mb-2"><strong>Nyquist Frequency:</strong></p>
+                                <p class="mb-2"><strong>Resampled:</strong></p>
+                                <p class="mb-2"><strong>Aliasing Status:</strong></p>
+                            </div>
+                            <div class="col-6">
+                                <p class="mb-2"><strong>${samplingInfo.analysis_sample_rate || 0} Hz</strong></p>
+                                <p class="mb-2"><strong class="${isAliasingRisk ? 'text-danger' : 'text-success'}">${samplingInfo.nyquist_frequency ? samplingInfo.nyquist_frequency.toFixed(0) : '--'} Hz</strong></p>
+                                <p class="mb-2"><strong>${samplingInfo.was_resampled ? 'Yes' : 'No'}</strong></p>
+                                <p class="mb-2"><strong class="${isAliasingRisk ? 'text-danger' : 'text-success'}">${isAliasingRisk ? 'ALIASING DETECTED' : 'No Aliasing'}</strong></p>
                             </div>
                         </div>
+                        ${isAliasingRisk ? `
+                        <div class="alert alert-danger mt-2">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            <strong>Aliasing Detected:</strong> Sampling rate (${samplingInfo.analysis_sample_rate}Hz) may affect drone detection accuracy
+                        </div>
+                        ` : `
+                        <div class="alert alert-success mt-2">
+                            <i class="bi bi-check-circle"></i>
+                            <strong>No Aliasing:</strong> Sampling rate sufficient for drone audio frequencies
+                        </div>
+                        `}
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <div class="display-4 ${isAliasingRisk ? 'text-danger' : 'text-success'}">
+                            ${isAliasingRisk ? '⚠️' : '✅'}
+                        </div>
+                        <small class="text-muted">${isAliasingRisk ? 'Aliasing Detected' : 'No Aliasing'}</small>
                     </div>
                 </div>
             </div>
         `;
     }
-    
-    // Top Detected Classes
-    if (top_classes && top_classes.length > 0) {
-        resultsHTML += `
+
+    displayDetectionResults(detectionData) {
+        const resultsSection = document.getElementById('detectionResults');
+        const topPrediction = detectionData.top_prediction;
+        const isDrone = detectionData.is_drone;
+        
+        let resultHtml = `
             <div class="row mt-4">
                 <div class="col-12">
-                    <div class="card">
+                    <div class="card result-card ${isDrone ? 'drone-detected' : 'noise-detected'}">
                         <div class="card-body">
-                            <h5 class="card-title">Top 5 Detected Sounds</h5>
-                            <div class="top-classes">
+                            <h4 class="card-title">
+                                <i class="bi ${isDrone ? 'bi-drone' : 'bi-volume-mute'} me-2"></i>
+                                ${isDrone ? 'DRONE DETECTED' : 'NO DRONE DETECTED'}
+                            </h4>
+                            <div class="row mt-4">
+                                <div class="col-md-6">
+                                    <h5>Detection Result</h5>
+                                    <div class="d-flex align-items-center mb-3">
+                                        <span class="badge ${isDrone ? 'bg-success' : 'bg-secondary'} me-2">
+                                            ${isDrone ? 'DRONE' : 'NO DRONE'}
+                                        </span>
+                                        <span class="fw-bold">${topPrediction.confidence_percentage}% Confidence</span>
+                                    </div>
+                                    <div class="confidence-bar">
+                                        <div class="confidence-fill ${isDrone ? 'bg-success' : 'bg-secondary'}" 
+                                             style="width: ${topPrediction.confidence_percentage}%"></div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <h5>All Predictions</h5>
         `;
-        
-        top_classes.forEach(([className, confidence], index) => {
-            const confidencePercent = (confidence * 100).toFixed(1);
-            const category = getCategoryForClass(className);
-            let badgeClass = 'bg-secondary';
-            let badgeText = 'Other';
-            let icon = 'bi-music-note';
-            
-            if (category === 'drone') {
-                badgeClass = 'bg-success';
-                badgeText = 'Drone';
-                icon = 'bi-airplane';
-            } else if (category === 'bird') {
-                badgeClass = 'bg-warning';
-                badgeText = 'Bird';
-                icon = 'bi-bird';
-            } else if (category === 'noise') {
-                badgeClass = 'bg-info';
-                badgeText = 'Noise';
-                icon = 'bi-volume-mute';
-            }
-            
-            resultsHTML += `
-                <div class="top-class-item ${category}">
-                    <span class="class-name">
-                        <i class="bi ${icon} me-2"></i>
-                        <strong>${index + 1}.</strong> ${className}
-                        <span class="badge ${badgeClass} ms-2">${badgeText}</span>
-                    </span>
-                    <div class="class-confidence">
-                        <div class="progress" style="width: 150px;">
-                            <div class="progress-bar ${badgeClass}" 
-                                 role="progressbar" 
-                                 style="width: ${confidencePercent}%">
-                            </div>
-                        </div>
-                        <span class="confidence-percent">
-                            ${confidencePercent}%
-                        </span>
-                    </div>
+
+        // Add all predictions
+        detectionData.predictions.forEach((pred, index) => {
+            resultHtml += `
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="text-capitalize">${pred.label.replace('_', ' ')}</span>
+                    <span class="fw-bold">${pred.confidence_percentage}%</span>
                 </div>
             `;
         });
+
+        resultHtml += `
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        resultsSection.innerHTML = resultHtml;
+        resultsSection.style.display = 'block';
+    }
+
+    playUploadedAudio() {
+        const audioElement = document.getElementById('uploadedAudio');
         
-        resultsHTML += `
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        if (this.currentAudioFile) {
+            audioElement.pause();
+            audioElement.currentTime = 0;
+            
+            if (this.resampledAudioData) {
+                // Use the pre-loaded resampled audio (browser-compatible)
+                audioElement.src = this.resampledAudioData;
+                
+                const analysisSamplingRate = document.getElementById('analysisSamplingRate').value;
+                if (analysisSamplingRate < 8000) {
+                    this.showUserNotification('🔊 Playing upsampled drone audio (aliasing preserved)...', 'info');
+                } else {
+                    this.showUserNotification('🔊 Playing drone audio...', 'info');
+                }
+            } else {
+                // Fallback to original audio
+                if (!this.uploadedAudioUrl) {
+                    this.uploadedAudioUrl = URL.createObjectURL(this.currentAudioFile);
+                }
+                audioElement.src = this.uploadedAudioUrl;
+                this.showUserNotification('🔊 Playing original drone audio...', 'info');
+            }
+            
+            audioElement.style.display = 'block';
+            
+            audioElement.play().catch(() => {
+                audioElement.style.display = 'block';
+            });
+        }
+    }
+
+    async downloadResampledAudio() {
+        if (!this.currentAudioFile) return;
+
+        const formData = new FormData();
+        formData.append('file', this.currentAudioFile);
+        
+        const analysisSamplingRate = document.getElementById('analysisSamplingRate').value;
+        formData.append('target_sampling_rate', analysisSamplingRate);
+        formData.append('mode', 'download'); // Exact sampling rate for download
+
+        try {
+            const apiResponse = await fetch(`${this.apiBaseUrl}/api/drone/resample-audio`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!apiResponse.ok) {
+                throw new Error('Failed to get downloadable audio');
+            }
+
+            const responseData = await apiResponse.json();
+            
+            if (responseData.success) {
+                const downloadLink = document.createElement('a');
+                downloadLink.href = responseData.audio_data;
+                downloadLink.download = `drone_audio_${analysisSamplingRate}Hz.wav`;
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+                
+                this.showUserNotification('💾 Drone audio downloaded with selected sampling rate!', 'success');
+            } else {
+                throw new Error(responseData.error || 'Unknown error');
+            }
+        } catch (error) {
+            console.error('Download error:', error);
+            this.showUserNotification('❌ Download failed: ' + error.message, 'error');
+        }
+    }
+
+    resetAnalysisSession() {
+        document.getElementById('audioFile').value = '';
+        document.getElementById('analyzeBtn').disabled = true;
+        document.getElementById('playUploadedBtn').disabled = true;
+        document.getElementById('downloadBtn').disabled = true;
+        document.getElementById('analysisResult').innerHTML = '<p class="text-muted">Upload a drone audio file and click "Analyze Audio" to see results</p>';
+        document.getElementById('uploadedWaveform').innerHTML = '';
+        document.getElementById('uploadedAudio').src = '';
+        document.getElementById('uploadedAudio').style.display = 'none';
+        document.getElementById('detectionResults').innerHTML = '';
+        document.getElementById('detectionResults').style.display = 'none';
+        
+        document.getElementById('analysisSamplingRate').value = 8000;
+        this.updateAnalysisSamplingRateDisplay({ target: document.getElementById('analysisSamplingRate') });
+        
+        document.getElementById('analysisSampling').textContent = '-- Hz';
+        document.getElementById('nyquistFrequency').textContent = '-- Hz';
+        document.getElementById('duration').textContent = '-- s';
+        
+        if (this.uploadedAudioUrl) {
+            URL.revokeObjectURL(this.uploadedAudioUrl);
+            this.uploadedAudioUrl = null;
+        }
+        
+        this.resampledAudioData = null;
+        this.currentAudioFile = null;
+        this.analysisResults = null;
+        
+        this.showUserNotification('🔄 Analysis session reset', 'info');
+    }
+
+    setAnalysisControlsState(disabled) {
+        document.getElementById('analyzeBtn').disabled = disabled;
+        document.getElementById('playUploadedBtn').disabled = disabled;
+        document.getElementById('downloadBtn').disabled = disabled || this.resampledAudioData === null;
+    }
+
+    showProcessingIndicator(show) {
+        document.getElementById('loading').style.display = show ? 'block' : 'none';
+    }
+
+    formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const kilobyte = 1024;
+        const sizeUnits = ['Bytes', 'KB', 'MB', 'GB'];
+        const unitIndex = Math.floor(Math.log(bytes) / Math.log(kilobyte));
+        return parseFloat((bytes / Math.pow(kilobyte, unitIndex)).toFixed(2)) + ' ' + sizeUnits[unitIndex];
+    }
+
+    showUserNotification(message, type = 'info') {
+        const existingNotifications = document.querySelectorAll('.custom-toast');
+        existingNotifications.forEach(notification => notification.remove());
+
+        const notificationElement = document.createElement('div');
+        const alertClass = type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info';
+        notificationElement.className = `custom-toast alert alert-${alertClass} alert-dismissible fade show`;
+        notificationElement.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         `;
+        
+        Object.assign(notificationElement.style, {
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            zIndex: '9999',
+            minWidth: '300px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            borderRadius: '8px'
+        });
+
+        document.body.appendChild(notificationElement);
+
+        setTimeout(() => {
+            if (notificationElement.parentNode) {
+                notificationElement.remove();
+            }
+        }, 5000);
     }
-    
-    // Audio Information
-    if (audio_info) {
-        resultsHTML += `
-            <div class="row mt-4">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-body">
-                            <h5 class="card-title">Analysis Information</h5>
-                            <div class="audio-info-grid">
-                                <div class="audio-info-item">
-                                    <span class="info-label">File Type:</span>
-                                    <span class="info-value">${audio_info.file_type}</span>
-                                </div>
-                                <div class="audio-info-item">
-                                    <span class="info-label">File Size:</span>
-                                    <span class="info-value">${audio_info.file_size}</span>
-                                </div>
-                                <div class="audio-info-item">
-                                    <span class="info-label">Analysis Time:</span>
-                                    <span class="info-value">${audio_info.analysis_time}</span>
-                                </div>
-                                <div class="audio-info-item">
-                                    <span class="info-label">Detection Model:</span>
-                                    <span class="info-value">YAMNet Audio Classification</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    
-    // Set the results HTML
-    resultsSection.innerHTML = resultsHTML;
-    
-    // Scroll to results
-    resultsSection.scrollIntoView({ behavior: 'smooth' });
 }
 
-// Helper function to get category for a class
-function getCategoryForClass(className) {
-    const droneClasses = ['aircraft', 'helicopter', 'fixed-wing', 'propeller', 'airscrew', 'motor vehicle', 'engine'];
-    const birdClasses = ['bird', 'vocalization', 'chirp', 'tweet', 'caw', 'crow', 'pigeon', 'dove', 'song'];
-    const noiseClasses = ['wind', 'static', 'white noise', 'pink noise', 'hum', 'environmental', 'background'];
-    
-    const lowerClassName = className.toLowerCase();
-    
-    if (droneClasses.some(cls => lowerClassName.includes(cls))) return 'drone';
-    if (birdClasses.some(cls => lowerClassName.includes(cls))) return 'bird';
-    if (noiseClasses.some(cls => lowerClassName.includes(cls))) return 'noise';
-    return 'other';
-}
-
-// Utility functions
-function formatFileSize(bytes) {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
-function formatDuration(seconds) {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
-function resetAudioInfo() {
-    fileName.textContent = '-';
-    fileSize.textContent = '-';
-    fileDuration.textContent = '-';
-    fileFormat.textContent = '-';
-}
-
-// Export results button
-exportResultsBtn.addEventListener('click', function() {
-    if (!fileInput.files.length) {
-        alert('Please analyze a file first');
-        return;
-    }
-    
-    // Create a simple export of the results
-    const exportData = {
-        fileName: fileInput.files[0].name,
-        analysisTime: new Date().toLocaleString(),
-        results: resultsSection.textContent
-    };
-    
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `drone-analysis-${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    alert('Results exported successfully!');
-});
-
-// Advanced analysis button
-advancedAnalysisBtn.addEventListener('click', function() {
-    alert('Advanced spectral analysis and pattern recognition features coming soon!');
-});
-
-// Load available classes when page loads
+// Initialize application
 document.addEventListener('DOMContentLoaded', function() {
-    loadDetectionClasses().then(classes => {
-        if (classes) {
-            console.log('Detection classes loaded successfully');
-        }
-    });
+    window.droneDetectionAnalyzer = new DroneDetectionAnalyzer();
+    console.log('Drone Detection Analyzer initialized');
 });
