@@ -16,6 +16,7 @@ Backend/venv/
 .env
 .env.local
 .env.*.local
+.venv
 
 # IDE
 .vscode/
